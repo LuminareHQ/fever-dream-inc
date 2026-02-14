@@ -3,12 +3,19 @@ use bevy::{
     prelude::*,
 };
 
+use rand;
+
 pub struct PortalPlugin;
 
 #[derive(Component)]
 struct PortalState {
     hovered: bool,
     scale: f32,
+}
+
+#[derive(Component)]
+struct PortalRing {
+    grow: bool,
 }
 
 impl Plugin for PortalPlugin {
@@ -60,6 +67,31 @@ fn setup(
         .observe(hover_portal)
         .observe(unhover_portal)
         .observe(click_on_portal);
+
+    for i in 0..5 {
+        commands
+            .spawn((
+                PortalRing {
+                    grow: false,
+                },
+                Mesh3d(meshes.add(Torus {
+                    minor_radius: 0.05,
+                    major_radius: 0.5,
+                })),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    emissive: Color::srgb(4., 2., 0.).into(),
+                    base_color: Srgba::rgb_u8(255, 127, 0).into(),
+                    reflectance: 1.0,
+                    perceptual_roughness: 0.0,
+                    metallic: 1.0,
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                })),
+                Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
+                NotShadowCaster,
+                NotShadowReceiver,
+            ));
+    }
 }
 
 fn hover_portal(on: On<Pointer<Over>>, mut query: Query<&mut PortalState>) {
@@ -75,20 +107,39 @@ fn unhover_portal(on: On<Pointer<Out>>, mut query: Query<&mut PortalState>) {
 }
 
 fn click_on_portal(
-    _on: On<Pointer<Click>>,
+    on: On<Pointer<Click>>,
     mut game_data: ResMut<crate::data::GameData>,
-    mut portals: Query<(&mut Transform, &mut PortalState)>,
+    mut rings: Query<(&mut Transform, &mut PortalRing)>,
 ) {
+    if on.button != PointerButton::Primary {
+        return;
+    }
     game_data.currency += 1;
-    for (mut transform, state) in portals.iter_mut() {
-        transform.scale = Vec3::splat(1.5);
+    for (mut ring_transform, mut ring_state) in rings.iter_mut() {
+        if ring_transform.scale.x < 0.75 {
+            ring_transform.scale = Vec3::splat(1.0);
+            ring_state.grow = true;
+            ring_transform.rotate_x(rand::random_range(0.0..1.0));
+            ring_transform.rotate_y(rand::random_range(0.0..1.0));
+            ring_transform.rotate_z(rand::random_range(0.0..1.0));
+            break;
+        }
     }
 }
 
-fn update(time: Res<Time>, mut portals: Query<(&mut Transform, &mut PortalState)>) {
+fn update(time: Res<Time>, mut portals: Query<(&mut Transform, &mut PortalState), Without<PortalRing>>, mut rings: Query<(&mut Transform, &mut PortalRing), Without<PortalState>>) {
     for (mut transform, mut state) in portals.iter_mut() {
         let target_scale = if state.hovered { 1.10 } else { 1.0 };
         state.scale += (target_scale - state.scale) * time.delta_secs() * 10.0;
         transform.scale = Vec3::splat(state.scale);
+    }
+    for (mut transform, mut ring_state) in rings.iter_mut() {
+        if ring_state.grow && transform.scale.x >= 0.75 {
+            transform.scale += Vec3::splat(0.2);
+            if transform.scale.x > 5.0 {
+                transform.scale = Vec3::splat(0.5);
+                ring_state.grow = false;
+            }
+        }
     }
 }
