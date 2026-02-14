@@ -1,5 +1,6 @@
 use bevy::{picking::mesh_picking::MeshPickingPlugin, prelude::*};
 
+mod automatons;
 mod camera;
 mod data;
 mod environment;
@@ -19,7 +20,7 @@ fn main() {
         ..default()
     }));
 
-    app.insert_resource(data::GameData { currency: 0 });
+    app.insert_resource(data::GameData::default());
 
     app.add_plugins(MeshPickingPlugin);
 
@@ -28,6 +29,7 @@ fn main() {
     app.add_plugins(interface::InterfacePlugin);
 
     app.add_plugins(portal::PortalPlugin);
+    app.add_plugins(automatons::HellmitePlugin);
 
     app.run();
 }

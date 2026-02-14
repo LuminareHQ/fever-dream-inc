@@ -69,28 +69,25 @@ fn setup(
         .observe(click_on_portal);
 
     for i in 0..5 {
-        commands
-            .spawn((
-                PortalRing {
-                    grow: false,
-                },
-                Mesh3d(meshes.add(Torus {
-                    minor_radius: 0.05,
-                    major_radius: 0.5,
-                })),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    emissive: Color::srgb(4., 2., 0.).into(),
-                    base_color: Srgba::rgb_u8(255, 127, 0).into(),
-                    reflectance: 1.0,
-                    perceptual_roughness: 0.0,
-                    metallic: 1.0,
-                    alpha_mode: AlphaMode::Blend,
-                    ..default()
-                })),
-                Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
-                NotShadowCaster,
-                NotShadowReceiver,
-            ));
+        commands.spawn((
+            PortalRing { grow: false },
+            Mesh3d(meshes.add(Torus {
+                minor_radius: 0.05,
+                major_radius: 0.5,
+            })),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                emissive: Color::srgb(4., 2., 0.).into(),
+                base_color: Srgba::rgb_u8(255, 127, 0).into(),
+                reflectance: 1.0,
+                perceptual_roughness: 0.0,
+                metallic: 1.0,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })),
+            Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
     }
 }
 
@@ -114,7 +111,7 @@ fn click_on_portal(
     if on.button != PointerButton::Primary {
         return;
     }
-    game_data.currency += 1;
+    game_data.add_income(crate::data::IncomeSource::Portal, 1);
     for (mut ring_transform, mut ring_state) in rings.iter_mut() {
         if ring_transform.scale.x < 0.75 {
             ring_transform.scale = Vec3::splat(1.0);
@@ -127,7 +124,11 @@ fn click_on_portal(
     }
 }
 
-fn update(time: Res<Time>, mut portals: Query<(&mut Transform, &mut PortalState), Without<PortalRing>>, mut rings: Query<(&mut Transform, &mut PortalRing), Without<PortalState>>) {
+fn update(
+    time: Res<Time>,
+    mut portals: Query<(&mut Transform, &mut PortalState), Without<PortalRing>>,
+    mut rings: Query<(&mut Transform, &mut PortalRing), Without<PortalState>>,
+) {
     for (mut transform, mut state) in portals.iter_mut() {
         let target_scale = if state.hovered { 1.10 } else { 1.0 };
         state.scale += (target_scale - state.scale) * time.delta_secs() * 10.0;

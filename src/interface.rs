@@ -41,6 +41,6 @@ fn update_score_text(
     time: Res<Time>,
 ) {
     for mut text in query.iter_mut() {
-        text.0 = data.currency.to_string();
+        text.0 = data.get_currency().to_string();
     }
 }
