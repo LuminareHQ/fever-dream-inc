@@ -25,7 +25,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                 Text::new("00.00"),
                 TextFont {
                     font: asset_server.load("fonts/Rubik_Glitch/RubikGlitch-Regular.ttf"),
-                    font_size: 18.0,
+                    font_size: 24.0,
                     ..default()
                 },
                 TextColor(WHITE.into()),

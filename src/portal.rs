@@ -14,6 +14,7 @@ struct PortalState {
 impl Plugin for PortalPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
+        app.add_systems(Update, update);
     }
 }
 
@@ -29,9 +30,12 @@ fn setup(
                 hovered: false,
                 scale: 1.0,
             },
-            Mesh3d(meshes.add(Sphere::default())),
+            Mesh3d(meshes.add(Sphere {
+                radius: 1.,
+                ..default()
+            })),
             MeshMaterial3d(materials.add(StandardMaterial {
-                emissive: Color::srgb(16., 0., 0.).into(),
+                emissive: Color::srgb(8., 0., 0.).into(),
                 base_color: Srgba::rgb_u8(255, 0, 0).into(),
                 reflectance: 1.0,
                 perceptual_roughness: 0.0,
@@ -39,7 +43,7 @@ fn setup(
                 alpha_mode: AlphaMode::Blend,
                 ..default()
             })),
-            Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(2.0)),
+            Transform::from_xyz(0., 0., 0.),
             children![(
                 PointLight {
                     shadows_enabled: true,
@@ -53,13 +57,38 @@ fn setup(
             NotShadowCaster,
             NotShadowReceiver,
         ))
+        .observe(hover_portal)
+        .observe(unhover_portal)
         .observe(click_on_portal);
 }
 
-fn hover_portal(on: On<Pointer<Over>>) {
-    let entity = on.entity;
+fn hover_portal(on: On<Pointer<Over>>, mut query: Query<&mut PortalState>) {
+    for mut state in query.iter_mut() {
+        state.hovered = true;
+    }
 }
 
-fn click_on_portal(_on: On<Pointer<Click>>, mut game_data: ResMut<crate::data::GameData>) {
+fn unhover_portal(on: On<Pointer<Out>>, mut query: Query<&mut PortalState>) {
+    for mut state in query.iter_mut() {
+        state.hovered = false;
+    }
+}
+
+fn click_on_portal(
+    _on: On<Pointer<Click>>,
+    mut game_data: ResMut<crate::data::GameData>,
+    mut portals: Query<(&mut Transform, &mut PortalState)>,
+) {
     game_data.currency += 1;
+    for (mut transform, state) in portals.iter_mut() {
+        transform.scale = Vec3::splat(1.5);
+    }
+}
+
+fn update(time: Res<Time>, mut portals: Query<(&mut Transform, &mut PortalState)>) {
+    for (mut transform, mut state) in portals.iter_mut() {
+        let target_scale = if state.hovered { 1.10 } else { 1.0 };
+        state.scale += (target_scale - state.scale) * time.delta_secs() * 10.0;
+        transform.scale = Vec3::splat(state.scale);
+    }
 }

@@ -24,7 +24,7 @@ fn setup(
 
     commands.spawn((
         Name::new("Ground Plane"),
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2 { x: 5000., y: 5000. }))),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2 { x: 500., y: 500. }))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Srgba::hex("444444").unwrap().into(),
             unlit: false,
