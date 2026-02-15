@@ -8,7 +8,7 @@ use crate::{automatons::Automaton, data::GameData};
 
 pub struct AbyssopodPlugin;
 
-static DISTANCE_FROM_ORIGIN: f32 = 2.5;
+static DISTANCE_FROM_ORIGIN: f32 = 3.0;
 static COOLDOWN: f32 = 10.0;
 static CURRENCY_PER_TICK: u64 = 1;
 static SCALE: f32 = 0.25;
@@ -146,7 +146,7 @@ fn update_based_on_owned(
 }
 
 fn movement(mut query: Query<(&mut Transform, &Automaton), With<Name>>, time: Res<Time>) {
-    let distance_from_origin = 2.5;
+    let distance_from_origin = DISTANCE_FROM_ORIGIN;
     let nudge_amount = 0.1;
     let nudge_recovery_duration = 0.5;
 

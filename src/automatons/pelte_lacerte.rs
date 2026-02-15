@@ -8,10 +8,13 @@ use crate::{automatons::Automaton, data::GameData};
 
 pub struct PelteLacertePlugin;
 
-static DISTANCE_FROM_ORIGIN: f32 = 2.5;
+static DISTANCE_FROM_ORIGIN: f32 = 5.0;
 static COOLDOWN: f32 = 10.0;
 static CURRENCY_PER_TICK: u64 = 1;
 static SCALE: f32 = 0.25;
+
+#[derive(Component)]
+struct PelteLacerte;
 
 fn random_time_left() -> f32 {
     rand::random_range(0.0..COOLDOWN)
@@ -96,7 +99,7 @@ fn update_based_on_owned(
     mut commands: Commands,
     game_data: Res<GameData>,
     asset_server: Res<AssetServer>,
-    mut pelte_lacertes: Query<(Entity, &mut Automaton, &mut Transform)>,
+    mut pelte_lacertes: Query<(Entity, &mut Automaton, &mut Transform, &PelteLacerte)>,
 ) {
     let quantity_owned =
         game_data.get_quantity_owned_by_source(crate::data::IncomeSource::PelteLacerte);
@@ -116,6 +119,7 @@ fn update_based_on_owned(
         let z = DISTANCE_FROM_ORIGIN * angle.sin();
 
         commands.spawn((
+            PelteLacerte,
             Name::new("PelteLacerte"),
             SceneRoot(scene),
             Automaton {
@@ -130,7 +134,7 @@ fn update_based_on_owned(
         ));
 
         // Reposition all existing entities to form an evenly spaced circle
-        for (i, (_entity, _automaton, mut transform)) in pelte_lacertes.iter_mut().enumerate() {
+        for (i, (_entity, _automaton, mut transform, _)) in pelte_lacertes.iter_mut().enumerate() {
             let angle = 2.0 * std::f32::consts::PI * (i as f32) / (total as f32);
             let x = DISTANCE_FROM_ORIGIN * angle.cos();
             let z = DISTANCE_FROM_ORIGIN * angle.sin();
@@ -142,7 +146,7 @@ fn update_based_on_owned(
 }
 
 fn movement(mut query: Query<(&mut Transform, &Automaton), With<Name>>, time: Res<Time>) {
-    let distance_from_origin = 2.5;
+    let distance_from_origin = DISTANCE_FROM_ORIGIN;
     let nudge_amount = 0.1;
     let nudge_recovery_duration = 0.5;
 
