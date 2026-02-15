@@ -7,10 +7,10 @@ use crate::data::GameData;
 
 mod automatons;
 mod camera;
+mod config;
 mod data;
 mod environment;
 mod interface;
-mod materials;
 mod portal;
 
 fn main() {

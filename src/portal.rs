@@ -115,7 +115,7 @@ fn click_on_portal(
     if on.button != PointerButton::Primary {
         return;
     }
-    game_data.add_income(crate::data::IncomeSource::Portal, 1);
+    game_data.add_income(crate::data::AutomatonVariant::Portal, 1);
     for (mut ring_transform, mut ring_state) in rings.iter_mut() {
         if ring_transform.scale.x < 0.75 {
             ring_transform.scale = Vec3::splat(1.0);

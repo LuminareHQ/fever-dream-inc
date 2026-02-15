@@ -32,7 +32,7 @@ fn setup(
             alpha_mode: AlphaMode::Blend,
             ..default()
         })),
-        Transform::from_xyz(0., 0., 0.),
+        Transform::from_xyz(0., -0.01, 0.),
     ));
 
     // Orbs to show currency source

@@ -8,10 +8,13 @@ use crate::{automatons::Automaton, data::GameData};
 
 pub struct GapingDubinePlugin;
 
-static DISTANCE_FROM_ORIGIN: f32 = 4.0;
-static COOLDOWN: f32 = 10.0;
-static CURRENCY_PER_TICK: u64 = 1;
-static SCALE: f32 = 0.25;
+use crate::config::get_stats;
+use crate::data::AutomatonVariant;
+const DISTANCE_FROM_ORIGIN: f32 = get_stats(AutomatonVariant::GapingDubine).distance_from_origin;
+const COOLDOWN: f32 = get_stats(AutomatonVariant::GapingDubine).cooldown;
+const CURRENCY_PER_TICK: u64 = get_stats(AutomatonVariant::GapingDubine).currency_per_tick;
+const SCALE: f32 = get_stats(AutomatonVariant::GapingDubine).scale;
+const ROTATION: f32 = get_stats(AutomatonVariant::GapingDubine).rotation;
 
 #[derive(Component)]
 struct GapingDubine;
@@ -57,7 +60,7 @@ fn setup(
         .spawn((
             Name::new("GapingDubine_ring"),
             Mesh3d(meshes.add(Torus {
-                minor_radius: 0.25,
+                minor_radius: SCALE,
                 major_radius: DISTANCE_FROM_ORIGIN,
             })),
             MeshMaterial3d(transparent_mat.clone()),
@@ -68,13 +71,13 @@ fn setup(
         .observe(update_material_on::<Pointer<Over>>(hover_mat.clone()))
         .observe(update_interface_state::<Pointer<Out>>(None))
         .observe(update_interface_state::<Pointer<Over>>(Some(
-            crate::data::IncomeSource::GapingDubine,
+            crate::data::AutomatonVariant::GapingDubine,
         )))
         .observe(click);
 }
 
 fn click(_: On<Pointer<Click>>, mut game_data: ResMut<GameData>) {
-    game_data.purchase_source(crate::data::IncomeSource::GapingDubine);
+    game_data.purchase_source(crate::data::AutomatonVariant::GapingDubine);
 }
 
 fn update_material_on<E: EntityEvent>(
@@ -88,7 +91,7 @@ fn update_material_on<E: EntityEvent>(
 }
 
 fn update_interface_state<E: EntityEvent>(
-    new_hovered: Option<crate::data::IncomeSource>,
+    new_hovered: Option<crate::data::AutomatonVariant>,
 ) -> impl Fn(On<E>, ResMut<crate::interface::InterfaceState>) {
     move |_event, mut interface_state| {
         interface_state.hovered_automaton = new_hovered;
@@ -102,7 +105,7 @@ fn update_based_on_owned(
     mut gaping_dubines: Query<(Entity, &mut Automaton, &mut Transform, &GapingDubine)>,
 ) {
     let quantity_owned =
-        game_data.get_quantity_owned_by_source(crate::data::IncomeSource::GapingDubine);
+        game_data.get_quantity_owned_by_source(crate::data::AutomatonVariant::GapingDubine);
     let current_count = gaping_dubines.iter().count() as u64;
     if quantity_owned != current_count {
         // Load the GapingDubine scene
@@ -123,7 +126,7 @@ fn update_based_on_owned(
             Name::new("GapingDubine"),
             SceneRoot(scene),
             Automaton {
-                source: crate::data::IncomeSource::GapingDubine,
+                source: crate::data::AutomatonVariant::GapingDubine,
                 currency_per_tick: CURRENCY_PER_TICK,
                 cooldown: COOLDOWN,
                 time_left: random_time_left(),
@@ -131,6 +134,7 @@ fn update_based_on_owned(
             Transform::from_xyz(x, 0.0, z)
                 .looking_at(Vec3::ZERO, Vec3::Y)
                 .with_scale(Vec3::splat(SCALE)),
+            Pickable::IGNORE,
         ));
 
         // Reposition all existing entities to form an evenly spaced circle
@@ -145,7 +149,7 @@ fn update_based_on_owned(
     }
 }
 
-fn movement(mut query: Query<(&mut Transform, &Automaton), With<Name>>, time: Res<Time>) {
+fn movement(mut query: Query<(&mut Transform, &Automaton), With<GapingDubine>>, time: Res<Time>) {
     let distance_from_origin = DISTANCE_FROM_ORIGIN;
     let nudge_amount = 0.1;
     let nudge_recovery_duration = 0.5;
@@ -153,7 +157,7 @@ fn movement(mut query: Query<(&mut Transform, &Automaton), With<Name>>, time: Re
     for (mut transform, automaton) in query.iter_mut() {
         // Handle Movement
         let center = Vec3::ZERO;
-        let angle = 0.05 * time.delta_secs();
+        let angle = ROTATION * time.delta_secs();
         let rot = Quat::from_rotation_y(angle);
 
         let rel = transform.translation - center;

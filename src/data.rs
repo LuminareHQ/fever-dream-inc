@@ -1,17 +1,10 @@
-use bevy::{math::ops::powf, prelude::*};
+use bevy::prelude::*;
 use std::collections::HashMap;
 
-static BASE_HELLMITE_COST: u64 = 25;
-static BASE_ABYSSOPOD_COST: u64 = 100;
-static BASE_GAPING_DUBINE_COST: u64 = 500;
-static BASE_GAZING_HOKU_COST: u64 = 2500;
-static BASE_LORGNER_COST: u64 = 12500;
-static BASE_PELTE_LACERTE_COST: u64 = 62500;
-static BASE_STRUTHIOS_COST: u64 = 312500;
-static BASE_WOOLY_CHIONOESCENT_COST: u64 = 1562500;
+use crate::config::get_stats;
 
 #[derive(Debug, Clone, Hash, Eq, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum IncomeSource {
+pub enum AutomatonVariant {
     Portal,
     Hellmite,
     Abyssopod,
@@ -23,18 +16,18 @@ pub enum IncomeSource {
     WoolyChionoescent,
 }
 
-impl std::fmt::Display for IncomeSource {
+impl std::fmt::Display for AutomatonVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IncomeSource::Portal => write!(f, "Portal"),
-            IncomeSource::Hellmite => write!(f, "Hellmite"),
-            IncomeSource::Abyssopod => write!(f, "Abyssopod"),
-            IncomeSource::GapingDubine => write!(f, "Gaping Dubine"),
-            IncomeSource::GazingHoku => write!(f, "Gazing Hoku"),
-            IncomeSource::Lorgner => write!(f, "Lorgner"),
-            IncomeSource::PelteLacerte => write!(f, "Pelte Lacerte"),
-            IncomeSource::Struthios => write!(f, "Struthios"),
-            IncomeSource::WoolyChionoescent => write!(f, "Wooly Chionoescent"),
+            AutomatonVariant::Portal => write!(f, "Portal"),
+            AutomatonVariant::Hellmite => write!(f, "Hellmite"),
+            AutomatonVariant::Abyssopod => write!(f, "Abyssopod"),
+            AutomatonVariant::GapingDubine => write!(f, "Gaping Dubine"),
+            AutomatonVariant::GazingHoku => write!(f, "Gazing Hoku"),
+            AutomatonVariant::Lorgner => write!(f, "Lorgner"),
+            AutomatonVariant::PelteLacerte => write!(f, "Pelte Lacerte"),
+            AutomatonVariant::Struthios => write!(f, "Struthios"),
+            AutomatonVariant::WoolyChionoescent => write!(f, "Wooly Chionoescent"),
         }
     }
 }
@@ -42,14 +35,14 @@ impl std::fmt::Display for IncomeSource {
 #[derive(Resource, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GameData {
     currency: u64,
-    owned_by_type: HashMap<IncomeSource, u64>,
-    income_by_type: HashMap<IncomeSource, u64>,
+    owned_by_type: HashMap<AutomatonVariant, u64>,
+    income_by_type: HashMap<AutomatonVariant, u64>,
 }
 
 impl Default for GameData {
     fn default() -> Self {
-        let income_by_type: HashMap<IncomeSource, u64> = HashMap::new();
-        let owned_by_type: HashMap<IncomeSource, u64> = HashMap::new();
+        let income_by_type: HashMap<AutomatonVariant, u64> = HashMap::new();
+        let owned_by_type: HashMap<AutomatonVariant, u64> = HashMap::new();
 
         Self {
             currency: 0,
@@ -89,7 +82,7 @@ impl GameData {
         self.currency
     }
 
-    pub fn add_income(&mut self, source: IncomeSource, amount: u64) {
+    pub fn add_income(&mut self, source: AutomatonVariant, amount: u64) {
         self.currency += amount as u64;
         if let Some(income) = self.income_by_type.get_mut(&source) {
             *income += amount as u64;
@@ -99,20 +92,21 @@ impl GameData {
         self.save();
     }
 
-    pub fn get_currency_by_source(&self, source: IncomeSource) -> u64 {
+    pub fn get_currency_by_source(&self, source: AutomatonVariant) -> u64 {
         self.income_by_type.get(&source).cloned().unwrap_or(0)
     }
 
-    pub fn get_cost_to_add_source(&self, source: IncomeSource) -> u64 {
+    pub fn get_cost_to_add_source(&self, source: AutomatonVariant) -> u64 {
+        let ratio = get_stats(source).ratio;
         let quantity_owned = self.get_quantity_owned_by_source(source.clone());
-        f64::floor(base_cost(source) as f64 * 1.5f64.powf(quantity_owned as f64)) as u64
+        f64::floor(base_cost(source) as f64 * ratio.powf(quantity_owned as f64)) as u64
     }
 
-    pub fn can_afford_source(&self, source: IncomeSource) -> bool {
+    pub fn can_afford_source(&self, source: AutomatonVariant) -> bool {
         self.get_currency() >= self.get_cost_to_add_source(source)
     }
 
-    pub fn purchase_source(&mut self, source: IncomeSource) -> bool {
+    pub fn purchase_source(&mut self, source: AutomatonVariant) -> bool {
         let cost = self.get_cost_to_add_source(source.clone());
         if self.can_afford_source(source.clone()) {
             self.currency -= cost;
@@ -123,7 +117,7 @@ impl GameData {
         }
     }
 
-    pub fn increase_quantity_owned_by_source(&mut self, source: IncomeSource) {
+    pub fn increase_quantity_owned_by_source(&mut self, source: AutomatonVariant) {
         if let Some(quantity) = self.owned_by_type.get_mut(&source) {
             *quantity += 1;
         } else {
@@ -132,7 +126,7 @@ impl GameData {
         self.save();
     }
 
-    pub fn get_quantity_owned_by_source(&self, source: IncomeSource) -> u64 {
+    pub fn get_quantity_owned_by_source(&self, source: AutomatonVariant) -> u64 {
         self.owned_by_type.get(&source).cloned().unwrap_or(0)
     }
 
@@ -153,16 +147,18 @@ impl GameData {
     }
 }
 
-fn base_cost(source: IncomeSource) -> u64 {
+fn base_cost(source: AutomatonVariant) -> u64 {
     match source {
-        IncomeSource::Hellmite => BASE_HELLMITE_COST,
-        IncomeSource::Abyssopod => BASE_ABYSSOPOD_COST,
-        IncomeSource::GapingDubine => BASE_GAPING_DUBINE_COST,
-        IncomeSource::GazingHoku => BASE_GAZING_HOKU_COST,
-        IncomeSource::Lorgner => BASE_LORGNER_COST,
-        IncomeSource::PelteLacerte => BASE_PELTE_LACERTE_COST,
-        IncomeSource::Struthios => BASE_STRUTHIOS_COST,
-        IncomeSource::WoolyChionoescent => BASE_WOOLY_CHIONOESCENT_COST,
+        AutomatonVariant::Hellmite => get_stats(AutomatonVariant::Hellmite).base_cost,
+        AutomatonVariant::Abyssopod => get_stats(AutomatonVariant::Abyssopod).base_cost,
+        AutomatonVariant::GapingDubine => get_stats(AutomatonVariant::GapingDubine).base_cost,
+        AutomatonVariant::GazingHoku => get_stats(AutomatonVariant::GazingHoku).base_cost,
+        AutomatonVariant::Lorgner => get_stats(AutomatonVariant::Lorgner).base_cost,
+        AutomatonVariant::PelteLacerte => get_stats(AutomatonVariant::PelteLacerte).base_cost,
+        AutomatonVariant::Struthios => get_stats(AutomatonVariant::Struthios).base_cost,
+        AutomatonVariant::WoolyChionoescent => {
+            get_stats(AutomatonVariant::WoolyChionoescent).base_cost
+        }
         _ => 0,
     }
 }

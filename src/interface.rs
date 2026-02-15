@@ -20,13 +20,16 @@ impl Plugin for InterfacePlugin {
 
 #[derive(Resource)]
 pub struct InterfaceState {
-    pub hovered_automaton: Option<crate::data::IncomeSource>,
+    pub hovered_automaton: Option<crate::data::AutomatonVariant>,
 }
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
+    let font_handle = asset_server.load("fonts/Rubik_Dirt/RubikDirt-Regular.ttf");
+
     commands
         .spawn((
             Node {
+                padding: UiRect::all(px(4)),
                 width: percent(100),
                 height: percent(100),
                 align_items: AlignItems::Start,
@@ -36,6 +39,11 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
             children![(
                 TextLayout::new_with_justify(Justify::Center),
                 Name::new("score_text"),
+                TextFont {
+                    font: font_handle.clone(),
+                    font_size: 24.0,
+                    ..default()
+                },
                 Text::new("00.00"),
                 TextColor(WHITE.into()),
             ),],
@@ -45,6 +53,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
     commands
         .spawn((
             Node {
+                padding: UiRect::all(px(4)),
                 width: percent(100),
                 height: percent(100),
                 align_items: AlignItems::End,
@@ -55,18 +64,33 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                 (
                     TextLayout::new_with_justify(Justify::Center),
                     Name::new("hovered_automaton_name_quantity_text"),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: 16.0,
+                        ..default()
+                    },
                     Text::new("00.00"),
                     TextColor(WHITE.into()),
                 ),
                 (
                     TextLayout::new_with_justify(Justify::Center),
                     Name::new("hovered_automoton_rate_total_text"),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: 16.0,
+                        ..default()
+                    },
                     Text::new("00.00"),
                     TextColor(WHITE.into()),
                 ),
                 (
                     TextLayout::new_with_justify(Justify::Center),
                     Name::new("hovered_automaton_cost_text"),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: 16.0,
+                        ..default()
+                    },
                     Text::new("00.00"),
                     TextColor(WHITE.into()),
                 ),
@@ -94,7 +118,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
     }
 }
 
-use crate::{data::GameData, interface};
+use crate::{config::get_stats, data::GameData, interface};
 fn update_interface(
     data: Res<GameData>,
     diagnostics: Res<DiagnosticsStore>,
@@ -103,16 +127,20 @@ fn update_interface(
 ) {
     let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS);
 
+    let hovered_rate: f64 = match interface_data.hovered_automaton {
+        Some(variant) => {
+            use crate::config::get_stats;
+
+            let currency_per_tick = get_stats(variant).currency_per_tick as f64;
+            let ticks_per_second = 1.0 / get_stats(variant).cooldown as f64;
+            currency_per_tick * ticks_per_second * data.get_quantity_owned_by_source(variant) as f64
+        }
+        None => 0.0,
+    };
+
     for (mut text, name) in query.iter_mut() {
         match name.as_str() {
             "score_text" => text.0 = format!("{:.2}", data.get_currency()),
-            "hellmite_quantity" => {
-                text.0 = format!(
-                    "Hellmites: {} -> ${}",
-                    data.get_quantity_owned_by_source(crate::data::IncomeSource::Hellmite),
-                    data.get_cost_to_add_source(crate::data::IncomeSource::Hellmite)
-                )
-            }
             "hovered_automaton_name_quantity_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
                     text.0 = format!(
@@ -127,8 +155,8 @@ fn update_interface(
             "hovered_automoton_rate_total_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
                     text.0 = format!(
-                        "Rate: ${}/s, Total: ${}",
-                        "FIX LATER",
+                        "Rate: {}/s, Generated: {}",
+                        format!("{:.2}", hovered_rate),
                         data.get_quantity_owned_by_source(source.clone())
                             * data.get_currency_by_source(source.clone())
                     );
@@ -138,10 +166,7 @@ fn update_interface(
             }
             "hovered_automaton_cost_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
-                    text.0 = format!(
-                        "Cost to add: ${}",
-                        data.get_cost_to_add_source(source.clone())
-                    );
+                    text.0 = format!(": ${}", data.get_cost_to_add_source(source.clone()));
                 } else {
                     text.0 = "".to_string();
                 }
@@ -166,8 +191,8 @@ fn buttons(
         match *interaction {
             Interaction::Pressed => match name.as_str() {
                 "hellmite_quantity" => {
-                    if game_data.can_afford_source(crate::data::IncomeSource::Hellmite) {
-                        game_data.purchase_source(crate::data::IncomeSource::Hellmite);
+                    if game_data.can_afford_source(crate::data::AutomatonVariant::Hellmite) {
+                        game_data.purchase_source(crate::data::AutomatonVariant::Hellmite);
                     }
                 }
                 _ => {

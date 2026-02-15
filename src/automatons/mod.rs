@@ -1,27 +1,29 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
-mod hellmite;
 mod abyssopod;
 mod gaping_dubine;
 mod gazing_hoku;
+mod hellmite;
 mod lorgner;
 mod pelte_lacerte;
 mod struthios;
 mod wooly_chionoescent;
-pub use hellmite::HellmitePlugin;
 pub use abyssopod::AbyssopodPlugin;
 pub use gaping_dubine::GapingDubinePlugin;
 pub use gazing_hoku::GazingHokuPlugin;
+pub use hellmite::HellmitePlugin;
 pub use lorgner::LorgnerPlugin;
 pub use pelte_lacerte::PelteLacertePlugin;
 pub use struthios::StruthiosPlugin;
 pub use wooly_chionoescent::WoolyChionoescentPlugin;
 
-use crate::data::IncomeSource;
+use crate::data::AutomatonVariant;
 
 #[derive(Component)]
 pub struct Automaton {
-    source: IncomeSource,
+    source: AutomatonVariant,
     currency_per_tick: u64,
     cooldown: f32,
     time_left: f32,

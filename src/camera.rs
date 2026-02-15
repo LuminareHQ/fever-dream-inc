@@ -43,9 +43,12 @@ impl Default for OrbitCamera {
             yaw: 45.0_f32.to_radians(),
             pitch: -25.0_f32.to_radians(),
             orbit_sensitivity: 0.005,
+            #[cfg(target_arch = "wasm32")]
+            dolly_sensitivity: 0.01,
+            #[cfg(not(target_arch = "wasm32"))]
             dolly_sensitivity: 1.0,
-            min_distance: 10.0,
-            max_distance: 100.0,
+            min_distance: 5.0,
+            max_distance: 35.0,
         }
     }
 }
@@ -91,7 +94,7 @@ fn orbit_camera(
             cam.yaw -= delta.x * cam.orbit_sensitivity;
             cam.pitch -= delta.y * cam.orbit_sensitivity;
             // Clamp pitch to avoid flipping (just under ±90°).
-            cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.05, -0.1);
+            cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.15, -0.25);
         }
 
         // --- Dolly arm: scroll wheel ---
