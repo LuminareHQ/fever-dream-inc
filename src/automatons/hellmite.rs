@@ -1,6 +1,7 @@
 use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
+    render::render_resource::Face,
 };
 
 use crate::{automatons::Automaton, data::GameData};
@@ -34,21 +35,61 @@ fn setup(
     let _: Handle<Scene> =
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/hellmite.glb"));
 
-    commands.spawn((
-        Name::new("hellmite_ring"),
-        Mesh3d(meshes.add(Torus {
-            minor_radius: 0.25,
-            major_radius: DISTANCE_FROM_ORIGIN,
-        })),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Srgba::rgba_u8(255, 255, 255, 8).into(),
-            unlit: true,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        NotShadowCaster,
-        NotShadowReceiver,
-    ));
+    let transparent_mat = materials.add(StandardMaterial {
+        base_color: Srgba::rgba_u8(255, 255, 255, 0).into(),
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+
+    let hover_mat = materials.add(StandardMaterial {
+        base_color: Srgba::rgba_u8(255, 255, 255, 12).into(),
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        cull_mode: Some(Face::Front),
+        ..default()
+    });
+
+    commands
+        .spawn((
+            Name::new("hellmite_ring"),
+            Mesh3d(meshes.add(Torus {
+                minor_radius: 0.25,
+                major_radius: DISTANCE_FROM_ORIGIN,
+            })),
+            MeshMaterial3d(transparent_mat.clone()),
+            NotShadowCaster,
+            NotShadowReceiver,
+        ))
+        .observe(update_material_on::<Pointer<Out>>(transparent_mat.clone()))
+        .observe(update_material_on::<Pointer<Over>>(hover_mat.clone()))
+        .observe(update_interface_state::<Pointer<Out>>(None))
+        .observe(update_interface_state::<Pointer<Over>>(Some(
+            crate::data::IncomeSource::Hellmite,
+        )))
+        .observe(click);
+}
+
+fn click(_: On<Pointer<Click>>, mut game_data: ResMut<GameData>) {
+    game_data.purchase_source(crate::data::IncomeSource::Hellmite);
+}
+
+fn update_material_on<E: EntityEvent>(
+    new_material: Handle<StandardMaterial>,
+) -> impl Fn(On<E>, Query<&mut MeshMaterial3d<StandardMaterial>>) {
+    move |event, mut query| {
+        if let Ok(mut material) = query.get_mut(event.event_target()) {
+            material.0 = new_material.clone();
+        }
+    }
+}
+
+fn update_interface_state<E: EntityEvent>(
+    new_hovered: Option<crate::data::IncomeSource>,
+) -> impl Fn(On<E>, ResMut<crate::interface::InterfaceState>) {
+    move |_event, mut interface_state| {
+        interface_state.hovered_automaton = new_hovered;
+    }
 }
 
 fn update_based_on_owned(

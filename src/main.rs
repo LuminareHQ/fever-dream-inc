@@ -27,7 +27,7 @@ fn main() {
 
     app.init_resource::<InputFocus>();
 
-    app.insert_resource(data::GameData::default());
+    app.insert_resource(data::GameData::restore());
 
     app.add_plugins(MeshPickingPlugin);
 

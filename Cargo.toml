@@ -9,11 +9,12 @@ bevy_egui = "0.39.1"
 getrandom = "0.4.1"
 rand = "0.10.0"
 rhai = "1.24.0"
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149" }
 
 
 [target.'cfg(all(target_family = "wasm", any(target_os = "unknown", target_os = "none")))'.dependencies]
 getrandom = { version = "0.4.1", features = ["wasm_js"] }
 getrandom_02 = { version = "0.2", features = ["js"], package = "getrandom" }
 js-sys = "0.3.85"
-web-sys = "0.3.85"
+web-sys = { version = "0.3.85", features = ["Window", "Storage"]}
