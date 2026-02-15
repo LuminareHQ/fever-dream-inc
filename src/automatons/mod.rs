@@ -1,7 +1,21 @@
 use bevy::prelude::*;
 
 mod hellmite;
+mod abyssopod;
+mod gaping_dubine;
+mod gazing_hoku;
+mod lorgner;
+mod pelte_lacerte;
+mod struthios;
+mod wooly_chionoescent;
 pub use hellmite::HellmitePlugin;
+pub use abyssopod::AbyssopodPlugin;
+pub use gaping_dubine::GapingDubinePlugin;
+pub use gazing_hoku::GazingHokuPlugin;
+pub use lorgner::LorgnerPlugin;
+pub use pelte_lacerte::PelteLacertePlugin;
+pub use struthios::StruthiosPlugin;
+pub use wooly_chionoescent::WoolyChionoescentPlugin;
 
 use crate::data::IncomeSource;
 

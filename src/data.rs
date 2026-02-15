@@ -2,11 +2,25 @@ use bevy::{math::ops::powf, prelude::*};
 use std::collections::HashMap;
 
 static BASE_HELLMITE_COST: u64 = 25;
+static BASE_ABYSSOPOD_COST: u64 = 100;
+static BASE_GAPING_DUBINE_COST: u64 = 500;
+static BASE_GAZING_HOKU_COST: u64 = 2500;
+static BASE_LORGNER_COST: u64 = 12500;
+static BASE_PELTE_LACERTE_COST: u64 = 62500;
+static BASE_STRUTHIOS_COST: u64 = 312500;
+static BASE_WOOLY_CHIONOESCENT_COST: u64 = 1562500;
 
 #[derive(Debug, Clone, Hash, Eq, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum IncomeSource {
     Portal,
     Hellmite,
+    Abyssopod,
+    GapingDubine,
+    GazingHoku,
+    Lorgner,
+    PelteLacerte,
+    Struthios,
+    WoolyChionoescent,
 }
 
 impl std::fmt::Display for IncomeSource {
@@ -14,6 +28,13 @@ impl std::fmt::Display for IncomeSource {
         match self {
             IncomeSource::Portal => write!(f, "Portal"),
             IncomeSource::Hellmite => write!(f, "Hellmite"),
+            IncomeSource::Abyssopod => write!(f, "Abyssopod"),
+            IncomeSource::GapingDubine => write!(f, "Gaping Dubine"),
+            IncomeSource::GazingHoku => write!(f, "Gazing Hoku"),
+            IncomeSource::Lorgner => write!(f, "Lorgner"),
+            IncomeSource::PelteLacerte => write!(f, "Pelte Lacerte"),
+            IncomeSource::Struthios => write!(f, "Struthios"),
+            IncomeSource::WoolyChionoescent => write!(f, "Wooly Chionoescent"),
         }
     }
 }
@@ -135,6 +156,13 @@ impl GameData {
 fn base_cost(source: IncomeSource) -> u64 {
     match source {
         IncomeSource::Hellmite => BASE_HELLMITE_COST,
+        IncomeSource::Abyssopod => BASE_ABYSSOPOD_COST,
+        IncomeSource::GapingDubine => BASE_GAPING_DUBINE_COST,
+        IncomeSource::GazingHoku => BASE_GAZING_HOKU_COST,
+        IncomeSource::Lorgner => BASE_LORGNER_COST,
+        IncomeSource::PelteLacerte => BASE_PELTE_LACERTE_COST,
+        IncomeSource::Struthios => BASE_STRUTHIOS_COST,
+        IncomeSource::WoolyChionoescent => BASE_WOOLY_CHIONOESCENT_COST,
         _ => 0,
     }
 }
