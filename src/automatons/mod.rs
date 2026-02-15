@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use bevy::prelude::*;
 
 mod abyssopod;
@@ -22,6 +20,9 @@ pub use wooly_chionoescent::WoolyChionoescentPlugin;
 use crate::data::AutomatonVariant;
 
 #[derive(Component)]
+pub struct PurchaseRing;
+
+#[derive(Component)]
 pub struct Automaton {
     source: AutomatonVariant,
     currency_per_tick: u64,
@@ -41,7 +42,7 @@ pub fn update_automatons(
         } else {
             data.add_income(automaton.source.clone(), automaton.currency_per_tick);
             automaton.time_left = automaton.cooldown;
-            for (mut orb_transform, mut orb, mut vis) in orbs.iter_mut() {
+            for (mut orb_transform, mut orb, _) in orbs.iter_mut() {
                 if orb_transform.translation.distance(Vec3::ZERO) < 0.1 {
                     orb.start = entity_transform.translation;
                     orb_transform.translation = orb.start;
@@ -58,6 +59,11 @@ pub fn update_automatons(
             orb.update(time.delta_secs());
             let t = orb.progress / 0.5;
             transform.translation = orb.start.lerp(Vec3::ZERO, t);
+
+            // Catch for is something goes wrong, just reset to the center
+            if transform.translation.distance(Vec3::ZERO) > 100. {
+                transform.translation = Vec3::ZERO;
+            }
         } else {
             *vis = Visibility::Hidden;
         }
@@ -80,13 +86,6 @@ impl Default for AutomatonOrb {
 }
 
 impl AutomatonOrb {
-    pub fn new(start: Vec3) -> Self {
-        Self {
-            start,
-            progress: 0.0,
-        }
-    }
-
     pub fn update(&mut self, time: f32) {
         self.progress += time;
     }

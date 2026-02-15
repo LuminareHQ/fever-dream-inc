@@ -1,8 +1,17 @@
+use crate::{
+    automatons::HellmitePlugin,
+    config::{AUTOMATON_STATS, get_stats},
+    data::GameData,
+};
 use bevy::{
     color::palettes::css::WHITE,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
+
+static SCORE_FONT_SIZE: f32 = 32.0;
+static OTHER_TEXT_FONT_SIZE: f32 = 24.0;
+static FONT_PATH: &str = "fonts/Squada_One/SquadaOne-Regular.ttf";
 
 pub struct InterfacePlugin;
 
@@ -24,7 +33,7 @@ pub struct InterfaceState {
 }
 
 fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
-    let font_handle = asset_server.load("fonts/Rubik_Dirt/RubikDirt-Regular.ttf");
+    let font_handle = asset_server.load(FONT_PATH);
 
     commands
         .spawn((
@@ -32,41 +41,19 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                 padding: UiRect::all(px(4)),
                 width: percent(100),
                 height: percent(100),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Start,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            children![(
-                TextLayout::new_with_justify(Justify::Center),
-                Name::new("score_text"),
-                TextFont {
-                    font: font_handle.clone(),
-                    font_size: 24.0,
-                    ..default()
-                },
-                Text::new("00.00"),
-                TextColor(WHITE.into()),
-            ),],
-        ))
-        .insert(Pickable::IGNORE);
-
-    commands
-        .spawn((
-            Node {
-                padding: UiRect::all(px(4)),
-                width: percent(100),
-                height: percent(100),
-                align_items: AlignItems::End,
-                justify_content: JustifyContent::SpaceBetween,
+                justify_content: JustifyContent::Start,
                 ..default()
             },
             children![
                 (
                     TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automaton_name_quantity_text"),
+                    Name::new("score_text"),
                     TextFont {
                         font: font_handle.clone(),
-                        font_size: 16.0,
+                        font_size: SCORE_FONT_SIZE,
                         ..default()
                     },
                     Text::new("00.00"),
@@ -74,10 +61,32 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                 ),
                 (
                     TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automoton_rate_total_text"),
+                    Name::new("hovered_automaton_name_quantity_text"),
                     TextFont {
                         font: font_handle.clone(),
-                        font_size: 16.0,
+                        font_size: OTHER_TEXT_FONT_SIZE,
+                        ..default()
+                    },
+                    Text::new("00.00"),
+                    TextColor(WHITE.into()),
+                ),
+                (
+                    TextLayout::new_with_justify(Justify::Center),
+                    Name::new("hovered_automoton_total_text"),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: OTHER_TEXT_FONT_SIZE,
+                        ..default()
+                    },
+                    Text::new("00.00"),
+                    TextColor(WHITE.into()),
+                ),
+                (
+                    TextLayout::new_with_justify(Justify::Center),
+                    Name::new("hovered_automoton_rate_text"),
+                    TextFont {
+                        font: font_handle.clone(),
+                        font_size: OTHER_TEXT_FONT_SIZE,
                         ..default()
                     },
                     Text::new("00.00"),
@@ -88,7 +97,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
                     Name::new("hovered_automaton_cost_text"),
                     TextFont {
                         font: font_handle.clone(),
-                        font_size: 16.0,
+                        font_size: OTHER_TEXT_FONT_SIZE,
                         ..default()
                     },
                     Text::new("00.00"),
@@ -105,7 +114,7 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
             Node {
                 position_type: PositionType::Absolute,
                 left: px(10),
-                top: px(10),
+                bottom: px(10),
                 ..default()
             },
             children![(
@@ -118,12 +127,11 @@ fn setup(mut commands: Commands, asset_server: ResMut<AssetServer>) {
     }
 }
 
-use crate::{config::get_stats, data::GameData, interface};
 fn update_interface(
     data: Res<GameData>,
     diagnostics: Res<DiagnosticsStore>,
     mut query: Query<(&mut Text, &Name), With<Name>>,
-    mut interface_data: Res<InterfaceState>,
+    interface_data: Res<InterfaceState>,
 ) {
     let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS);
 
@@ -143,30 +151,47 @@ fn update_interface(
             "score_text" => text.0 = format!("{:.2}", data.get_currency()),
             "hovered_automaton_name_quantity_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
-                    text.0 = format!(
-                        "{}: {}",
-                        source,
-                        data.get_quantity_owned_by_source(source.clone())
-                    );
+                    if source.clone() != crate::data::AutomatonVariant::Portal {
+                        text.0 = format!(
+                            "{} {}s",
+                            data.get_quantity_owned_by_source(source.clone()),
+                            source,
+                        );
+                    } else {
+                        text.0 = "The Portal".to_string();
+                    }
                 } else {
                     text.0 = "".to_string();
                 }
             }
-            "hovered_automoton_rate_total_text" => {
+            "hovered_automoton_total_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
-                    text.0 = format!(
-                        "Rate: {}/s, Generated: {}",
-                        format!("{:.2}", hovered_rate),
-                        data.get_quantity_owned_by_source(source.clone())
-                            * data.get_currency_by_source(source.clone())
-                    );
+                    text.0 = format!("Generated: {}", data.get_currency_by_source(source.clone()));
+                } else {
+                    text.0 = "".to_string();
+                }
+            }
+            "hovered_automoton_rate_text" => {
+                if let Some(source) = interface_data.hovered_automaton.clone() {
+                    if source.clone() != crate::data::AutomatonVariant::Portal {
+                        text.0 = format!("Rate: {}/s", format!("{:.2}", hovered_rate),);
+                    }
                 } else {
                     text.0 = "".to_string();
                 }
             }
             "hovered_automaton_cost_text" => {
                 if let Some(source) = interface_data.hovered_automaton.clone() {
-                    text.0 = format!(": ${}", data.get_cost_to_add_source(source.clone()));
+                    if source.clone() != crate::data::AutomatonVariant::Portal {
+                        if prerequisites_met(source.clone(), &data) {
+                            text.0 = format!(
+                                "Summon For {}",
+                                data.get_cost_to_add_source(source.clone())
+                            );
+                        } else {
+                            text.0 = prereq_not_met(source.clone(), &data);
+                        }
+                    }
                 } else {
                     text.0 = "".to_string();
                 }
@@ -202,5 +227,81 @@ fn buttons(
             Interaction::Hovered => {}
             Interaction::None => {}
         }
+    }
+}
+
+use crate::data::AutomatonVariant;
+fn prerequisites_met(variant: AutomatonVariant, game_data: &GameData) -> bool {
+    match variant {
+        AutomatonVariant::Hellmite => {
+            game_data.get_currency() >= get_stats(AutomatonVariant::Hellmite).required_previous
+        }
+        AutomatonVariant::Abyssopod => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::Hellmite)
+                >= get_stats(AutomatonVariant::Abyssopod).required_previous
+        }
+        AutomatonVariant::GapingDubine => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::Abyssopod)
+                >= get_stats(AutomatonVariant::GapingDubine).required_previous
+        }
+        AutomatonVariant::GazingHoku => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::GapingDubine)
+                >= get_stats(AutomatonVariant::GazingHoku).required_previous
+        }
+        AutomatonVariant::Lorgner => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::GazingHoku)
+                >= get_stats(AutomatonVariant::Lorgner).required_previous
+        }
+        AutomatonVariant::PelteLacerte => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::Lorgner)
+                >= get_stats(AutomatonVariant::PelteLacerte).required_previous
+        }
+        AutomatonVariant::Struthios => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::PelteLacerte)
+                >= get_stats(AutomatonVariant::Struthios).required_previous
+        }
+        AutomatonVariant::WoolyChionoescent => {
+            game_data.get_quantity_owned_by_source(AutomatonVariant::Struthios)
+                >= get_stats(AutomatonVariant::WoolyChionoescent).required_previous
+        }
+        _ => false,
+    }
+}
+
+fn prereq_not_met(variant: AutomatonVariant, game_data: &GameData) -> String {
+    match variant {
+        AutomatonVariant::Hellmite => format!(
+            "Requires {} currency",
+            get_stats(AutomatonVariant::Hellmite).required_previous
+        ),
+        AutomatonVariant::Abyssopod => format!(
+            "Requires {} Hellmites",
+            get_stats(AutomatonVariant::Abyssopod).required_previous
+        ),
+        AutomatonVariant::GapingDubine => format!(
+            "Requires {} Abyssopods",
+            get_stats(AutomatonVariant::GapingDubine).required_previous
+        ),
+        AutomatonVariant::GazingHoku => format!(
+            "Requires {} Gaping Dubines",
+            get_stats(AutomatonVariant::GazingHoku).required_previous
+        ),
+        AutomatonVariant::Lorgner => format!(
+            "Requires {} Gazing Hokues",
+            get_stats(AutomatonVariant::Lorgner).required_previous
+        ),
+        AutomatonVariant::PelteLacerte => format!(
+            "Requires {} Lorgners",
+            get_stats(AutomatonVariant::PelteLacerte).required_previous
+        ),
+        AutomatonVariant::Struthios => format!(
+            "Requires {} Pelte Lacerte",
+            get_stats(AutomatonVariant::Struthios).required_previous
+        ),
+        AutomatonVariant::WoolyChionoescent => format!(
+            "Requires {} Struthios",
+            get_stats(AutomatonVariant::WoolyChionoescent).required_previous
+        ),
+        _ => "Unknown automaton".to_string(),
     }
 }

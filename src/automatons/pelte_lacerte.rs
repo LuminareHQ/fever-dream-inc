@@ -134,7 +134,6 @@ fn update_based_on_owned(
             Transform::from_xyz(x, 0.0, z)
                 .looking_at(Vec3::ZERO, Vec3::Y)
                 .with_scale(Vec3::splat(SCALE)),
-            Pickable::IGNORE,
         ));
 
         // Reposition all existing entities to form an evenly spaced circle

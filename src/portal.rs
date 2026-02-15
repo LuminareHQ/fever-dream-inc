@@ -64,6 +64,10 @@ fn setup(
             NotShadowCaster,
             NotShadowReceiver,
         ))
+        .observe(update_interface_state::<Pointer<Out>>(None))
+        .observe(update_interface_state::<Pointer<Over>>(Some(
+            crate::data::AutomatonVariant::Portal,
+        )))
         .observe(hover_portal)
         .observe(unhover_portal)
         .observe(click_on_portal);
@@ -87,11 +91,18 @@ fn setup(
                 ..default()
             })),
             Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
-            Pickable::IGNORE,
             NotShadowCaster,
             NotShadowReceiver,
             Visibility::Hidden,
         ));
+    }
+}
+
+fn update_interface_state<E: EntityEvent>(
+    new_hovered: Option<crate::data::AutomatonVariant>,
+) -> impl Fn(On<E>, ResMut<crate::interface::InterfaceState>) {
+    move |_event, mut interface_state| {
+        interface_state.hovered_automaton = new_hovered;
     }
 }
 

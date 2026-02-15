@@ -30,6 +30,10 @@ fn main() {
     app.insert_resource(data::GameData::restore());
 
     app.add_plugins(MeshPickingPlugin);
+    app.insert_resource(MeshPickingSettings {
+        require_markers: false,
+        ..default()
+    });
 
     app.add_plugins(environment::EnvironmentPlugin);
     app.add_plugins(camera::CameraPlugin);

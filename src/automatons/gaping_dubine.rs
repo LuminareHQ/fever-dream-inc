@@ -4,7 +4,10 @@ use bevy::{
     render::render_resource::Face,
 };
 
-use crate::{automatons::Automaton, data::GameData};
+use crate::{
+    automatons::{Automaton, PurchaseRing},
+    data::GameData,
+};
 
 pub struct GapingDubinePlugin;
 
@@ -58,6 +61,8 @@ fn setup(
 
     commands
         .spawn((
+            PurchaseRing,
+            GapingDubine,
             Name::new("GapingDubine_ring"),
             Mesh3d(meshes.add(Torus {
                 minor_radius: SCALE,
@@ -134,7 +139,6 @@ fn update_based_on_owned(
             Transform::from_xyz(x, 0.0, z)
                 .looking_at(Vec3::ZERO, Vec3::Y)
                 .with_scale(Vec3::splat(SCALE)),
-            Pickable::IGNORE,
         ));
 
         // Reposition all existing entities to form an evenly spaced circle
