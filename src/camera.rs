@@ -28,15 +28,11 @@ pub struct OrbitCamera {
     /// Mouse sensitivity for orbiting (radians per pixel).
     pub orbit_sensitivity: f32,
     /// Mouse sensitivity for panning (world-units per pixel).
-    pub _pan_sensitivity: f32,
-    /// Scroll sensitivity for dolly (world-units per scroll line).
     pub dolly_sensitivity: f32,
     /// Minimum arm distance (prevents zooming through the target).
     pub min_distance: f32,
     /// Maximum arm distance.
     pub max_distance: f32,
-    pub idle_time: f32,
-    pub idle_threshold: f32,
 }
 
 impl Default for OrbitCamera {
@@ -47,12 +43,9 @@ impl Default for OrbitCamera {
             yaw: 45.0_f32.to_radians(),
             pitch: -25.0_f32.to_radians(),
             orbit_sensitivity: 0.005,
-            _pan_sensitivity: 0.01,
             dolly_sensitivity: 1.0,
             min_distance: 10.0,
             max_distance: 100.0,
-            idle_time: 0.0,
-            idle_threshold: 5.0,
         }
     }
 }
@@ -84,7 +77,6 @@ fn setup(
 }
 
 fn orbit_camera(
-    time: Res<Time>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     mouse_scroll: Res<AccumulatedMouseScroll>,
@@ -93,18 +85,6 @@ fn orbit_camera(
     let delta = mouse_motion.delta; // pixels moved this frame
     let scroll = mouse_scroll.delta.y; // scroll lines this frame
 
-    if mouse_buttons.any_pressed([MouseButton::Left]) || scroll != 0.0 {
-        // Reset idle timer if there's any input.
-        for (_, mut cam) in &mut query {
-            cam.idle_time = 0.0;
-        }
-    } else {
-        // Increment idle timer if no input.
-        for (_, mut cam) in &mut query {
-            cam.idle_time += time.delta_secs();
-        }
-    }
-
     for (mut transform, mut cam) in &mut query {
         // --- Orbit: right mouse button + drag ---
         if mouse_buttons.pressed(MouseButton::Left) {
@@ -112,12 +92,6 @@ fn orbit_camera(
             cam.pitch -= delta.y * cam.orbit_sensitivity;
             // Clamp pitch to avoid flipping (just under ±90°).
             cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.05, -0.1);
-        }
-
-        if cam.idle_time > cam.idle_threshold {
-            // Auto-rotate around the target when idle.
-            cam.yaw += time.delta_secs() * 0.125; // Rotate at a constant speed.
-            cam.pitch += (-25.0_f32.to_radians() - cam.pitch) * time.delta_secs() * 0.5; // Smoothly interpolate pitch back to default.
         }
 
         // --- Dolly arm: scroll wheel ---

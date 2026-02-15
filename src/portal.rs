@@ -47,7 +47,7 @@ fn setup(
                 reflectance: 1.0,
                 perceptual_roughness: 0.0,
                 metallic: 1.0,
-                alpha_mode: AlphaMode::Blend,
+                alpha_mode: AlphaMode::Opaque,
                 ..default()
             })),
             Transform::from_xyz(0., 0., 0.),
@@ -59,7 +59,7 @@ fn setup(
                     intensity: 25.0,
                     ..default()
                 },
-                Transform::from_xyz(0., 0.1, 0.)
+                Transform::from_xyz(0., 0.4, 0.)
             )],
             NotShadowCaster,
             NotShadowReceiver,
@@ -72,32 +72,36 @@ fn setup(
         commands.spawn((
             PortalRing { grow: false },
             Mesh3d(meshes.add(Torus {
-                minor_radius: 0.05,
+                minor_radius: 0.02,
                 major_radius: 0.5,
             })),
             MeshMaterial3d(materials.add(StandardMaterial {
                 emissive: Color::srgb(4., 2., 0.).into(),
                 base_color: Srgba::rgb_u8(255, 127, 0).into(),
-                reflectance: 1.0,
+                #[cfg(target_arch = "wasm32")]
+                unlit: true, // Doesn't look right, but prevent the screen from getting blown out on web... :/
+                reflectance: 0.0,
                 perceptual_roughness: 0.0,
-                metallic: 1.0,
-                alpha_mode: AlphaMode::Blend,
+                metallic: 0.0,
+                alpha_mode: AlphaMode::Opaque,
                 ..default()
             })),
             Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
+            Pickable::IGNORE,
             NotShadowCaster,
             NotShadowReceiver,
+            Visibility::Hidden,
         ));
     }
 }
 
-fn hover_portal(on: On<Pointer<Over>>, mut query: Query<&mut PortalState>) {
+fn hover_portal(_on: On<Pointer<Over>>, mut query: Query<&mut PortalState>) {
     for mut state in query.iter_mut() {
         state.hovered = true;
     }
 }
 
-fn unhover_portal(on: On<Pointer<Out>>, mut query: Query<&mut PortalState>) {
+fn unhover_portal(_on: On<Pointer<Out>>, mut query: Query<&mut PortalState>) {
     for mut state in query.iter_mut() {
         state.hovered = false;
     }
@@ -127,19 +131,21 @@ fn click_on_portal(
 fn update(
     time: Res<Time>,
     mut portals: Query<(&mut Transform, &mut PortalState), Without<PortalRing>>,
-    mut rings: Query<(&mut Transform, &mut PortalRing), Without<PortalState>>,
+    mut rings: Query<(&mut Transform, &mut PortalRing, &mut Visibility), Without<PortalState>>,
 ) {
     for (mut transform, mut state) in portals.iter_mut() {
         let target_scale = if state.hovered { 1.10 } else { 1.0 };
         state.scale += (target_scale - state.scale) * time.delta_secs() * 10.0;
         transform.scale = Vec3::splat(state.scale);
     }
-    for (mut transform, mut ring_state) in rings.iter_mut() {
+    for (mut transform, mut ring_state, mut vis) in rings.iter_mut() {
         if ring_state.grow && transform.scale.x >= 0.75 {
             transform.scale += Vec3::splat(0.2);
-            if transform.scale.x > 5.0 {
+            *vis = Visibility::Visible;
+            if transform.scale.x > 4.0 {
                 transform.scale = Vec3::splat(0.5);
                 ring_state.grow = false;
+                *vis = Visibility::Hidden;
             }
         }
     }

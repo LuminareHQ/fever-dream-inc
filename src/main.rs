@@ -1,4 +1,9 @@
-use bevy::{picking::mesh_picking::MeshPickingPlugin, prelude::*};
+use bevy::{
+    input::keyboard::KeyboardInput, input_focus::InputFocus,
+    picking::mesh_picking::MeshPickingPlugin, prelude::*,
+};
+
+use crate::data::GameData;
 
 mod automatons;
 mod camera;
@@ -20,6 +25,8 @@ fn main() {
         ..default()
     }));
 
+    app.init_resource::<InputFocus>();
+
     app.insert_resource(data::GameData::default());
 
     app.add_plugins(MeshPickingPlugin);
@@ -30,6 +37,8 @@ fn main() {
 
     app.add_plugins(portal::PortalPlugin);
     app.add_plugins(automatons::HellmitePlugin);
+
+    app.add_systems(Update, automatons::update_automatons);
 
     app.run();
 }

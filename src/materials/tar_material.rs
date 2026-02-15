@@ -1,4 +1,6 @@
-use bevy::pbr::{Material, MaterialExtension, MaterialPlugin};
+#![allow(dead_code)]
+
+use bevy::pbr::MaterialExtension;
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
