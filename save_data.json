@@ -1,1 +1,15 @@
-{"currency":17517,"owned_by_type":{"Hellmite":6},"income_by_type":{"Portal":399,"GazingHoku":2155,"WoolyChionoescent":2179,"Abyssopod":2179,"Lorgner":2181,"Hellmite":2535,"PelteLacerte":2154,"Struthios":2156,"GapingDubine":2153}}
+{
+  "currency": 18968,
+  "owned_by_type": { "Hellmite": 6, "Abyssopod": 1 },
+  "income_by_type": {
+    "Hellmite": 2774,
+    "GazingHoku": 2346,
+    "GapingDubine": 2357,
+    "Struthios": 2331,
+    "Lorgner": 2349,
+    "Portal": 399,
+    "WoolyChionoescent": 2369,
+    "PelteLacerte": 2327,
+    "Abyssopod": 2390
+  }
+}

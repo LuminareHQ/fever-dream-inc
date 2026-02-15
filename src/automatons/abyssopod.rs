@@ -13,6 +13,9 @@ static COOLDOWN: f32 = 10.0;
 static CURRENCY_PER_TICK: u64 = 1;
 static SCALE: f32 = 0.25;
 
+#[derive(Component)]
+struct Abyssopod;
+
 fn random_time_left() -> f32 {
     rand::random_range(0.0..COOLDOWN)
 }
@@ -96,7 +99,7 @@ fn update_based_on_owned(
     mut commands: Commands,
     game_data: Res<GameData>,
     asset_server: Res<AssetServer>,
-    mut abyssopods: Query<(Entity, &mut Automaton, &mut Transform)>,
+    mut abyssopods: Query<(Entity, &mut Automaton, &mut Transform, &Abyssopod)>,
 ) {
     let quantity_owned =
         game_data.get_quantity_owned_by_source(crate::data::IncomeSource::Abyssopod);
@@ -116,6 +119,7 @@ fn update_based_on_owned(
         let z = DISTANCE_FROM_ORIGIN * angle.sin();
 
         commands.spawn((
+            Abyssopod,
             Name::new("Abyssopod"),
             SceneRoot(scene),
             Automaton {
@@ -130,7 +134,7 @@ fn update_based_on_owned(
         ));
 
         // Reposition all existing entities to form an evenly spaced circle
-        for (i, (_entity, _automaton, mut transform)) in abyssopods.iter_mut().enumerate() {
+        for (i, (_entity, _automaton, mut transform, _)) in abyssopods.iter_mut().enumerate() {
             let angle = 2.0 * std::f32::consts::PI * (i as f32) / (total as f32);
             let x = DISTANCE_FROM_ORIGIN * angle.cos();
             let z = DISTANCE_FROM_ORIGIN * angle.sin();
