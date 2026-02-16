@@ -4,8 +4,31 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.18.0", features = ["bevy_gltf", "png"] }
+bevy = { version = "0.18.0", default-features = false, features = [
+    "default_app",
+    "2d_api",
+    "2d_bevy_render",
+    "3d_api",
+    "3d_bevy_render",
+    "ui_api",
+    "ui_bevy_render",
+    "scene",
+    "picking",
+    "bevy_gilrs",
+    "bevy_winit",
+    "default_font",
+    "multi_threaded",
+    "webgl2",
+    "x11",
+    "wayland",
+    "sysinfo_plugin",
+    "bevy_gltf",
+    "png",
+    "mp3",
+    "wav",
+] }
 bevy_egui = "0.39.1"
+bevy_kira_audio = { version = "0.25.0", features = ["mp3", "wav"] }
 getrandom = "0.4.1"
 rand = "0.10.0"
 rhai = "1.24.0"

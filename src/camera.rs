@@ -39,7 +39,7 @@ impl Default for OrbitCamera {
     fn default() -> Self {
         Self {
             target: Vec3::ZERO,
-            distance: 10.0,
+            distance: 5.0,
             yaw: 45.0_f32.to_radians(),
             pitch: -25.0_f32.to_radians(),
             orbit_sensitivity: 0.005,
@@ -94,7 +94,7 @@ fn orbit_camera(
             cam.yaw -= delta.x * cam.orbit_sensitivity;
             cam.pitch -= delta.y * cam.orbit_sensitivity;
             // Clamp pitch to avoid flipping (just under ±90°).
-            cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.15, -0.25);
+            cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.05, -0.25);
         }
 
         // --- Dolly arm: scroll wheel ---

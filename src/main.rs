@@ -1,10 +1,6 @@
-use bevy::{
-    input::keyboard::KeyboardInput, input_focus::InputFocus,
-    picking::mesh_picking::MeshPickingPlugin, prelude::*,
-};
+use bevy::{input_focus::InputFocus, picking::mesh_picking::MeshPickingPlugin, prelude::*};
 
-use crate::data::GameData;
-
+mod audio;
 mod automatons;
 mod camera;
 mod config;
@@ -19,7 +15,7 @@ fn main() {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             fit_canvas_to_parent: true,
-            title: "Fever Dream Incremental".to_string(),
+            title: "REMM".to_string(),
             ..default()
         }),
         ..default()
@@ -34,6 +30,8 @@ fn main() {
         require_markers: false,
         ..default()
     });
+
+    app.add_plugins(audio::AudioPlugin);
 
     app.add_plugins(environment::EnvironmentPlugin);
     app.add_plugins(camera::CameraPlugin);

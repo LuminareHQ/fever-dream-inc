@@ -107,6 +107,9 @@ impl GameData {
     }
 
     pub fn purchase_source(&mut self, source: AutomatonVariant) -> bool {
+        if !crate::interface::prerequisites_met(source, self) {
+            return false;
+        }
         let cost = self.get_cost_to_add_source(source.clone());
         if self.can_afford_source(source.clone()) {
             self.currency -= cost;

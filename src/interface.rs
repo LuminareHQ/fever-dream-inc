@@ -1,13 +1,10 @@
-use crate::{
-    automatons::HellmitePlugin,
-    config::{AUTOMATON_STATS, get_stats},
-    data::GameData,
-};
+use crate::{audio::AudioState, config::get_stats, data::GameData};
 use bevy::{
     color::palettes::css::WHITE,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 
 static SCORE_FONT_SIZE: f32 = 32.0;
 static OTHER_TEXT_FONT_SIZE: f32 = 24.0;
@@ -17,6 +14,7 @@ pub struct InterfacePlugin;
 
 impl Plugin for InterfacePlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(EguiPlugin::default());
         app.add_plugins(FrameTimeDiagnosticsPlugin::default());
         app.insert_resource(InterfaceState {
             hovered_automaton: None,
@@ -24,7 +22,25 @@ impl Plugin for InterfacePlugin {
         app.add_systems(Startup, setup);
         app.add_systems(Update, update_interface);
         app.add_systems(Update, buttons);
+        app.add_systems(EguiPrimaryContextPass, egui_system);
     }
+}
+
+use bevy_egui::EguiContexts;
+fn egui_system(mut ctx: EguiContexts, mut audio_state: ResMut<AudioState>) -> Result {
+    use bevy_egui::egui;
+    egui::Window::new("Volume Controls")
+        .anchor(egui::Align2::LEFT_BOTTOM, [0., 0.])
+        .resizable(false)
+        .title_bar(false)
+        .movable(false)
+        .show(ctx.ctx_mut()?, |ui| {
+            ui.heading("Volume Controls");
+            ui.label("Music Volume");
+            ui.add(egui::Slider::new(&mut audio_state.volume, 0.0..=1.0));
+            ui.checkbox(&mut audio_state.play_pickup, "Interaction Sound");
+        });
+    Ok(())
 }
 
 #[derive(Resource)]
@@ -189,7 +205,7 @@ fn update_interface(
                                 data.get_cost_to_add_source(source.clone())
                             );
                         } else {
-                            text.0 = prereq_not_met(source.clone(), &data);
+                            text.0 = prereq_not_met(source.clone());
                         }
                     }
                 } else {
@@ -212,7 +228,7 @@ fn buttons(
     mut interaction_query: Query<(Entity, &Interaction, &Name), Changed<Interaction>>,
     mut game_data: ResMut<GameData>,
 ) {
-    for (entity, interaction, name) in &mut interaction_query {
+    for (_, interaction, name) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => match name.as_str() {
                 "hellmite_quantity" => {
@@ -231,10 +247,11 @@ fn buttons(
 }
 
 use crate::data::AutomatonVariant;
-fn prerequisites_met(variant: AutomatonVariant, game_data: &GameData) -> bool {
+pub fn prerequisites_met(variant: AutomatonVariant, game_data: &GameData) -> bool {
     match variant {
         AutomatonVariant::Hellmite => {
             game_data.get_currency() >= get_stats(AutomatonVariant::Hellmite).required_previous
+                || game_data.get_quantity_owned_by_source(AutomatonVariant::Hellmite) > 0
         }
         AutomatonVariant::Abyssopod => {
             game_data.get_quantity_owned_by_source(AutomatonVariant::Hellmite)
@@ -268,10 +285,10 @@ fn prerequisites_met(variant: AutomatonVariant, game_data: &GameData) -> bool {
     }
 }
 
-fn prereq_not_met(variant: AutomatonVariant, game_data: &GameData) -> String {
+fn prereq_not_met(variant: AutomatonVariant) -> String {
     match variant {
         AutomatonVariant::Hellmite => format!(
-            "Requires {} currency",
+            "Requires {} Entropy",
             get_stats(AutomatonVariant::Hellmite).required_previous
         ),
         AutomatonVariant::Abyssopod => format!(

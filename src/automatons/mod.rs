@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_kira_audio::prelude::*;
 
 mod abyssopod;
 mod gaping_dubine;
@@ -35,15 +36,26 @@ pub fn update_automatons(
     time: Res<Time>,
     mut data: ResMut<crate::data::GameData>,
     mut orbs: Query<(&mut Transform, &mut AutomatonOrb, &mut Visibility)>,
+    interaction: Res<AudioChannel<crate::audio::InteractionChannel>>,
+    asset_server: Res<AssetServer>,
+    audio_state: Res<crate::audio::AudioState>,
 ) {
     for (mut automaton, entity_transform) in automatons.iter_mut() {
         if automaton.time_left >= 0.0 {
             automaton.time_left -= time.delta_secs();
         } else {
             data.add_income(automaton.source.clone(), automaton.currency_per_tick);
+
+            // Play Pickup Sound if enabled
+            if audio_state.play_pickup {
+                interaction
+                    .play(asset_server.load(crate::audio::PICKUP_AUDIO))
+                    .with_playback_rate(0.75);
+            }
+
             automaton.time_left = automaton.cooldown;
             for (mut orb_transform, mut orb, _) in orbs.iter_mut() {
-                if orb_transform.translation.distance(Vec3::ZERO) < 0.1 {
+                if orb_transform.translation.distance(Vec3::ZERO) <= 0.25 {
                     orb.start = entity_transform.translation;
                     orb_transform.translation = orb.start;
                     orb.progress = 0.0;
@@ -54,7 +66,7 @@ pub fn update_automatons(
     }
 
     for (mut transform, mut orb, mut vis) in orbs.iter_mut() {
-        if transform.translation.distance(Vec3::ZERO) > 0.1 {
+        if transform.translation.distance(Vec3::ZERO) > 0.25 {
             *vis = Visibility::Visible;
             orb.update(time.delta_secs());
             let t = orb.progress / 0.5;

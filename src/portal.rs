@@ -2,6 +2,7 @@ use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
 };
+use bevy_kira_audio::prelude::*;
 
 use rand;
 
@@ -54,9 +55,9 @@ fn setup(
             children![(
                 PointLight {
                     shadows_enabled: true,
-                    range: 10.0,
+                    range: 40.0,
                     color: Color::srgb(255., 0., 0.),
-                    intensity: 25.0,
+                    intensity: 40.0,
                     ..default()
                 },
                 Transform::from_xyz(0., 0.4, 0.)
@@ -72,29 +73,31 @@ fn setup(
         .observe(unhover_portal)
         .observe(click_on_portal);
 
-    for i in 0..5 {
-        commands.spawn((
-            PortalRing { grow: false },
-            Mesh3d(meshes.add(Torus {
-                minor_radius: 0.02,
-                major_radius: 0.5,
-            })),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                emissive: Color::srgb(4., 2., 0.).into(),
-                base_color: Srgba::rgb_u8(255, 127, 0).into(),
-                #[cfg(target_arch = "wasm32")]
-                unlit: true, // Doesn't look right, but prevent the screen from getting blown out on web... :/
-                reflectance: 0.0,
-                perceptual_roughness: 0.0,
-                metallic: 0.0,
-                alpha_mode: AlphaMode::Opaque,
-                ..default()
-            })),
-            Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
-            NotShadowCaster,
-            NotShadowReceiver,
-            Visibility::Hidden,
-        ));
+    for _ in 0..10 {
+        commands
+            .spawn((
+                PortalRing { grow: false },
+                Mesh3d(meshes.add(Torus {
+                    minor_radius: 0.02,
+                    major_radius: 0.5,
+                })),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    emissive: Color::srgb(4., 2., 0.).into(),
+                    base_color: Srgba::rgb_u8(255, 127, 0).into(),
+                    #[cfg(target_arch = "wasm32")]
+                    unlit: true, // Doesn't look right, but prevent the screen from getting blown out on web... :/
+                    reflectance: 0.0,
+                    perceptual_roughness: 0.0,
+                    metallic: 0.0,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })),
+                Transform::from_xyz(0., 0., 0.).with_scale(Vec3::splat(0.5)),
+                NotShadowCaster,
+                NotShadowReceiver,
+                Visibility::Hidden,
+            ))
+            .insert(Pickable::IGNORE);
     }
 }
 
@@ -122,10 +125,21 @@ fn click_on_portal(
     on: On<Pointer<Click>>,
     mut game_data: ResMut<crate::data::GameData>,
     mut rings: Query<(&mut Transform, &mut PortalRing)>,
+    audio_state: Res<crate::audio::AudioState>,
+    interaction: Res<AudioChannel<crate::audio::InteractionChannel>>,
+    asset_server: Res<AssetServer>,
 ) {
     if on.button != PointerButton::Primary {
         return;
     }
+
+    // Play Pickup Sound if enabled
+    if audio_state.play_pickup {
+        interaction
+            .play(asset_server.load(crate::audio::PICKUP_AUDIO))
+            .with_playback_rate(0.75);
+    }
+
     game_data.add_income(crate::data::AutomatonVariant::Portal, 1);
     for (mut ring_transform, mut ring_state) in rings.iter_mut() {
         if ring_transform.scale.x < 0.75 {
