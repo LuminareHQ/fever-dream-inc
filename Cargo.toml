@@ -23,11 +23,11 @@ bevy = { version = "0.18.0", default-features = false, features = [
     "wayland",
     "sysinfo_plugin",
     "bevy_gltf",
+    "experimental_bevy_ui_widgets",
     "png",
     "mp3",
     "wav",
 ] }
-bevy_egui = "0.39.1"
 bevy_kira_audio = { version = "0.25.0", features = ["mp3", "wav"] }
 getrandom = "0.4.1"
 rand = "0.10.0"

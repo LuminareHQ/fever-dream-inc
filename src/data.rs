@@ -97,9 +97,9 @@ impl GameData {
     }
 
     pub fn get_cost_to_add_source(&self, source: AutomatonVariant) -> u64 {
-        let ratio = get_stats(source).ratio;
-        let quantity_owned = self.get_quantity_owned_by_source(source.clone());
-        f64::floor(base_cost(source) as f64 * ratio.powf(quantity_owned as f64)) as u64
+        let stats = get_stats(source);
+        let quantity_owned = self.get_quantity_owned_by_source(source);
+        f64::floor(stats.base_cost as f64 * stats.ratio.powf(quantity_owned as f64)) as u64
     }
 
     pub fn can_afford_source(&self, source: AutomatonVariant) -> bool {
@@ -110,8 +110,8 @@ impl GameData {
         if !crate::interface::prerequisites_met(source, self) {
             return false;
         }
-        let cost = self.get_cost_to_add_source(source.clone());
-        if self.can_afford_source(source.clone()) {
+        let cost = self.get_cost_to_add_source(source);
+        if self.can_afford_source(source) {
             self.currency -= cost;
             self.increase_quantity_owned_by_source(source);
             true
@@ -147,21 +147,5 @@ impl GameData {
         {
             let _ = std::fs::write("save_data.json", data);
         }
-    }
-}
-
-fn base_cost(source: AutomatonVariant) -> u64 {
-    match source {
-        AutomatonVariant::Hellmite => get_stats(AutomatonVariant::Hellmite).base_cost,
-        AutomatonVariant::Abyssopod => get_stats(AutomatonVariant::Abyssopod).base_cost,
-        AutomatonVariant::GapingDubine => get_stats(AutomatonVariant::GapingDubine).base_cost,
-        AutomatonVariant::GazingHoku => get_stats(AutomatonVariant::GazingHoku).base_cost,
-        AutomatonVariant::Lorgner => get_stats(AutomatonVariant::Lorgner).base_cost,
-        AutomatonVariant::PelteLacerte => get_stats(AutomatonVariant::PelteLacerte).base_cost,
-        AutomatonVariant::Struthios => get_stats(AutomatonVariant::Struthios).base_cost,
-        AutomatonVariant::WoolyChionoescent => {
-            get_stats(AutomatonVariant::WoolyChionoescent).base_cost
-        }
-        _ => 0,
     }
 }

@@ -38,16 +38,7 @@ fn main() {
     app.add_plugins(interface::InterfacePlugin);
 
     app.add_plugins(portal::PortalPlugin);
-    app.add_plugins(automatons::HellmitePlugin);
-    app.add_plugins(automatons::AbyssopodPlugin);
-    app.add_plugins(automatons::GapingDubinePlugin);
-    app.add_plugins(automatons::GazingHokuPlugin);
-    app.add_plugins(automatons::LorgnerPlugin);
-    app.add_plugins(automatons::PelteLacertePlugin);
-    app.add_plugins(automatons::StruthiosPlugin);
-    app.add_plugins(automatons::WoolyChionoescentPlugin);
-
-    app.add_systems(Update, automatons::update_automatons);
+    app.add_plugins(automatons::AutomatonsPlugin);
 
     app.run();
 }
