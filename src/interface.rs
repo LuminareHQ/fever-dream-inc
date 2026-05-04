@@ -50,7 +50,7 @@ impl Plugin for InterfacePlugin {
         app.insert_resource(InterfaceState {
             hovered_automaton: None,
         });
-        app.add_systems(Startup, setup);
+        app.add_systems(Startup, setup.after(crate::audio::start_background_audio));
         app.add_systems(
             Update,
             (
@@ -58,6 +58,7 @@ impl Plugin for InterfacePlugin {
                 sync_audio_controls,
                 update_music_volume_slider_style,
                 update_interaction_sound_checkbox_style,
+                update_audio_panel_visibility,
             ),
         );
         app.add_systems(Update, buttons);
@@ -68,6 +69,25 @@ impl Plugin for InterfacePlugin {
 pub struct InterfaceState {
     pub hovered_automaton: Option<AutomatonVariant>,
 }
+
+#[derive(Component)]
+struct AudioControlPanel;
+
+#[derive(Component)]
+struct AudioControlPanelExpanded;
+
+#[derive(Component)]
+struct AudioControlPanelCollapsed;
+
+#[derive(Component)]
+struct AudioPanelAnim {
+    progress: f32,
+}
+
+const AUDIO_PANEL_COLLAPSED_SIZE: f32 = 22.0;
+const AUDIO_PANEL_EXPANDED_WIDTH: f32 = 286.0;
+const AUDIO_PANEL_EXPANDED_HEIGHT: f32 = 110.0;
+const AUDIO_PANEL_ANIM_SPEED: f32 = 6.0;
 
 #[derive(Component, Default)]
 struct MusicVolumeSlider;
@@ -201,29 +221,69 @@ fn spawn_audio_controls(
                 position_type: PositionType::Absolute,
                 left: px(12),
                 bottom: px(12),
-                width: px(286),
-                padding: UiRect::all(px(10)),
+                width: px(AUDIO_PANEL_COLLAPSED_SIZE),
+                height: px(AUDIO_PANEL_COLLAPSED_SIZE),
+                padding: UiRect::all(px(0)),
                 border: UiRect::all(px(1)),
                 border_radius: BorderRadius::all(px(4)),
                 display: Display::Flex,
                 flex_direction: FlexDirection::Column,
-                row_gap: px(8),
+                overflow: Overflow::clip(),
                 ..default()
             },
             BackgroundColor(PANEL_BACKGROUND),
             BorderColor::all(PANEL_BORDER),
             TabGroup::default(),
+            AudioControlPanel,
+            AudioPanelAnim { progress: 0.0 },
+            Hovered::default(),
         ))
         .with_children(|panel| {
-            panel.spawn(control_text(
-                font_handle,
-                "Audio",
-                CONTROL_TITLE_FONT_SIZE,
-                CONTROL_TEXT,
-            ));
+            panel
+                .spawn((
+                    AudioControlPanelCollapsed,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(0),
+                        top: px(0),
+                        width: px(AUDIO_PANEL_COLLAPSED_SIZE),
+                        height: px(AUDIO_PANEL_COLLAPSED_SIZE),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|btn| {
+                    btn.spawn(control_text(
+                        font_handle,
+                        "\u{2699}",
+                        CONTROL_TEXT_FONT_SIZE,
+                        CONTROL_TEXT,
+                    ));
+                });
 
             panel
-                .spawn((Node {
+                .spawn((
+                    AudioControlPanelExpanded,
+                    Node {
+                        width: px(AUDIO_PANEL_EXPANDED_WIDTH - 22.0),
+                        padding: UiRect::all(px(10)),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(8),
+                        ..default()
+                    },
+                ))
+                .with_children(|expanded| {
+                    expanded.spawn(control_text(
+                        font_handle,
+                        "Audio Settings",
+                        CONTROL_TITLE_FONT_SIZE,
+                        CONTROL_TEXT,
+                    ));
+
+            expanded
+                .spawn((
+                    Node {
                     width: percent(100),
                     display: Display::Flex,
                     flex_direction: FlexDirection::Row,
@@ -261,7 +321,7 @@ fn spawn_audio_controls(
                     ));
                 });
 
-            let mut checkbox = panel.spawn((
+            let mut checkbox = expanded.spawn((
                 Node {
                     width: percent(100),
                     display: Display::Flex,
@@ -285,6 +345,7 @@ fn spawn_audio_controls(
                     Node {
                         width: px(16),
                         height: px(16),
+                        margin: UiRect::right(px(8)),
                         border: UiRect::all(px(2)),
                         border_radius: BorderRadius::all(px(3)),
                         justify_content: JustifyContent::Center,
@@ -331,6 +392,7 @@ fn spawn_audio_controls(
                     ),
                 ));
             });
+                });
         });
 }
 
@@ -425,9 +487,11 @@ fn update_music_volume_from_slider(
     value_change: On<ValueChange<f32>>,
     mut commands: Commands,
     mut audio_state: ResMut<AudioState>,
+    mut game_data: ResMut<GameData>,
 ) {
     let volume = value_change.value.clamp(0.0, 1.0);
     audio_state.volume = volume;
+    game_data.update_audio_settings(volume, audio_state.play_pickup);
     commands
         .entity(value_change.source)
         .insert(SliderValue(volume));
@@ -437,8 +501,10 @@ fn update_interaction_sound_from_checkbox(
     value_change: On<ValueChange<bool>>,
     mut commands: Commands,
     mut audio_state: ResMut<AudioState>,
+    mut game_data: ResMut<GameData>,
 ) {
     audio_state.play_pickup = value_change.value;
+    game_data.update_audio_settings(audio_state.volume, value_change.value);
     if value_change.value {
         commands.entity(value_change.source).insert(Checked);
     } else {
@@ -699,5 +765,92 @@ fn automaton_quantity_label(variant: AutomatonVariant, quantity: u64) -> String 
         variant.to_string()
     } else {
         format!("{}s", variant)
+    }
+}
+
+fn update_audio_panel_visibility(
+    time: Res<Time>,
+    windows: Query<&Window>,
+    mut panel_query: Query<
+        (Entity, &Hovered, &mut AudioPanelAnim, &mut Node),
+        (
+            With<AudioControlPanel>,
+            Without<AudioControlPanelExpanded>,
+            Without<AudioControlPanelCollapsed>,
+        ),
+    >,
+    children_query: Query<&Children>,
+    mut expanded_query: Query<
+        &mut Node,
+        (
+            With<AudioControlPanelExpanded>,
+            Without<AudioControlPanelCollapsed>,
+            Without<AudioControlPanel>,
+        ),
+    >,
+    mut collapsed_query: Query<
+        (&mut Node, Option<&Children>),
+        (
+            With<AudioControlPanelCollapsed>,
+            Without<AudioControlPanelExpanded>,
+            Without<AudioControlPanel>,
+        ),
+    >,
+    mut text_color_query: Query<&mut TextColor>,
+) {
+    let dt = time.delta_secs();
+    let cursor_in_window = windows
+        .iter()
+        .any(|w| w.cursor_position().is_some());
+    for (panel_entity, hovered, mut anim, mut panel_node) in &mut panel_query {
+        let target = if cursor_in_window && hovered.get() { 1.0 } else { 0.0 };
+        let delta = (target - anim.progress) * AUDIO_PANEL_ANIM_SPEED * dt;
+        anim.progress = (anim.progress + delta).clamp(0.0, 1.0);
+        if (target - anim.progress).abs() < 0.001 {
+            anim.progress = target;
+        }
+        let t = ease_in_out(anim.progress);
+
+        let width = lerp(AUDIO_PANEL_COLLAPSED_SIZE, AUDIO_PANEL_EXPANDED_WIDTH, t);
+        let height = lerp(AUDIO_PANEL_COLLAPSED_SIZE, AUDIO_PANEL_EXPANDED_HEIGHT, t);
+        panel_node.width = px(width);
+        panel_node.height = px(height);
+
+        for child in children_query.iter_descendants(panel_entity) {
+            if let Ok(mut node) = expanded_query.get_mut(child) {
+                node.display = if anim.progress > 0.001 {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+            }
+            if let Ok((mut node, btn_children)) = collapsed_query.get_mut(child) {
+                node.display = if anim.progress < 0.999 {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+                let alpha = 1.0 - t;
+                if let Some(btn_children) = btn_children {
+                    for c in btn_children.iter() {
+                        if let Ok(mut color) = text_color_query.get_mut(c) {
+                            color.0 = CONTROL_TEXT.with_alpha(alpha);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+fn ease_in_out(t: f32) -> f32 {
+    if t < 0.5 {
+        2.0 * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
     }
 }

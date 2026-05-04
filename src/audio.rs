@@ -37,13 +37,7 @@ pub struct InteractionChannel;
 
 impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(AudioState {
-            volume: 0.25,
-            current_track: 0,
-            pickup_handle: None,
-            play_pickup: true,
-            current_track_handle: None,
-        });
+        // AudioState will be initialized in start_background_audio after GameData is available
         app.add_plugins(bevy_kira_audio::AudioPlugin);
         app.add_audio_channel::<InteractionChannel>();
         app.add_systems(Startup, start_background_audio);
@@ -52,22 +46,30 @@ impl Plugin for AudioPlugin {
     }
 }
 
-fn start_background_audio(
+pub fn start_background_audio(
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     audio: Res<Audio>,
     interaction: Res<AudioChannel<InteractionChannel>>,
-    mut state: ResMut<AudioState>,
+    game_data: Res<crate::data::GameData>,
 ) {
-    state.pickup_handle = Some(asset_server.load(PICKUP_AUDIO));
-
+    let pickup_handle = Some(asset_server.load(PICKUP_AUDIO));
     interaction.set_volume(-55.0);
 
-    state.current_track = rand::random_range(0..BACKGROUND_AUDIO.len());
-    state.current_track_handle = Some(
+    let current_track = rand::random_range(0..BACKGROUND_AUDIO.len());
+    let current_track_handle = Some(
         audio
-            .play(asset_server.load(BACKGROUND_AUDIO[state.current_track]))
+            .play(asset_server.load(BACKGROUND_AUDIO[current_track]))
             .handle(),
     );
+
+    commands.insert_resource(AudioState {
+        volume: game_data.audio_settings.volume,
+        current_track,
+        pickup_handle,
+        play_pickup: game_data.audio_settings.play_pickup,
+        current_track_handle,
+    });
 }
 
 fn play_next_track_on_end(

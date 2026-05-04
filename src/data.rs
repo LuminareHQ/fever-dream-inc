@@ -3,6 +3,21 @@ use std::collections::HashMap;
 
 use crate::config::get_stats;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AudioSettings {
+    pub volume: f32,
+    pub play_pickup: bool,
+}
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self {
+            volume: 0.25,
+            play_pickup: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, Eq, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AutomatonVariant {
     Portal,
@@ -37,6 +52,8 @@ pub struct GameData {
     currency: u64,
     owned_by_type: HashMap<AutomatonVariant, u64>,
     income_by_type: HashMap<AutomatonVariant, u64>,
+    #[serde(default)]
+    pub audio_settings: AudioSettings,
 }
 
 impl Default for GameData {
@@ -48,6 +65,7 @@ impl Default for GameData {
             currency: 0,
             owned_by_type,
             income_by_type,
+            audio_settings: AudioSettings::default(),
         }
     }
 }
@@ -131,6 +149,12 @@ impl GameData {
 
     pub fn get_quantity_owned_by_source(&self, source: AutomatonVariant) -> u64 {
         self.owned_by_type.get(&source).cloned().unwrap_or(0)
+    }
+
+    pub fn update_audio_settings(&mut self, volume: f32, play_pickup: bool) {
+        self.audio_settings.volume = volume;
+        self.audio_settings.play_pickup = play_pickup;
+        self.save();
     }
 
     fn save(&self) {
