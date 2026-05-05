@@ -5,89 +5,28 @@ use bevy::{
 };
 use bevy_kira_audio::prelude::*;
 
-use crate::{config::get_stats, data::AutomatonVariant};
+use crate::{
+    audio,
+    data::{AutomatonVariant, automaton_definitions},
+    interface::{InterfaceState, set_hovered_automaton},
+    rand,
+};
 
 pub struct AutomatonsPlugin;
 
 impl Plugin for AutomatonsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
-        app.add_systems(Update, (update_based_on_owned, movement, update_automatons));
+        app.add_systems(
+            Update,
+            (
+                update_based_on_owned,
+                movement,
+                update_automatons,
+                make_automaton_meshes_unpickable,
+            ),
+        );
     }
-}
-
-#[derive(Clone, Copy)]
-pub struct AutomatonDefinition {
-    pub variant: AutomatonVariant,
-    pub model_path: &'static str,
-    pub entity_name: &'static str,
-    pub ring_name: &'static str,
-}
-
-// Unlock order follows this table, while numeric balance stays in config.rs.
-pub const AUTOMATON_DEFINITIONS: [AutomatonDefinition; 8] = [
-    AutomatonDefinition {
-        variant: AutomatonVariant::Hellmite,
-        model_path: "models/hellmite.glb",
-        entity_name: "Hellmite",
-        ring_name: "hellmite_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::Abyssopod,
-        model_path: "models/abyssopod.glb",
-        entity_name: "Abyssopod",
-        ring_name: "Abyssopod_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::GapingDubine,
-        model_path: "models/gaping_dubine.glb",
-        entity_name: "GapingDubine",
-        ring_name: "GapingDubine_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::GazingHoku,
-        model_path: "models/gazing_hoku.glb",
-        entity_name: "GazingHoku",
-        ring_name: "GazingHoku_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::Lorgner,
-        model_path: "models/lorgner.glb",
-        entity_name: "Lorgner",
-        ring_name: "Lorgner_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::PelteLacerte,
-        model_path: "models/pelte_lacerte.glb",
-        entity_name: "PelteLacerte",
-        ring_name: "PelteLacerte_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::Struthios,
-        model_path: "models/struthios.glb",
-        entity_name: "Struthios",
-        ring_name: "Struthios_ring",
-    },
-    AutomatonDefinition {
-        variant: AutomatonVariant::WoolyChionoescent,
-        model_path: "models/wooly_chionoescent.glb",
-        entity_name: "WoolyChionoescent",
-        ring_name: "WoolyChionoescent_ring",
-    },
-];
-
-pub fn is_automaton_variant(variant: AutomatonVariant) -> bool {
-    AUTOMATON_DEFINITIONS
-        .iter()
-        .any(|definition| definition.variant == variant)
-}
-
-pub fn previous_automaton_variant(variant: AutomatonVariant) -> Option<AutomatonVariant> {
-    AUTOMATON_DEFINITIONS
-        .iter()
-        .position(|definition| definition.variant == variant)
-        .and_then(|index| index.checked_sub(1))
-        .map(|previous_index| AUTOMATON_DEFINITIONS[previous_index].variant)
 }
 
 #[derive(Component)]
@@ -103,7 +42,7 @@ pub struct Automaton {
 
 impl Automaton {
     fn new(source: AutomatonVariant) -> Self {
-        let stats = get_stats(source);
+        let stats = source.stats();
         Self {
             source,
             currency_per_tick: stats.currency_per_tick,
@@ -134,15 +73,20 @@ fn setup(
         ..default()
     });
 
-    for definition in AUTOMATON_DEFINITIONS {
-        let stats = get_stats(definition.variant);
-        let _: Handle<Scene> =
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset(definition.model_path));
+    for definition in automaton_definitions() {
+        let stats = &definition.stats;
+        let model_path = definition
+            .model_path()
+            .expect("automaton definition should have a model path");
+        let ring_name = definition
+            .ring_name()
+            .expect("automaton definition should have a ring name");
+        let _: Handle<Scene> = asset_server.load(GltfAssetLabel::Scene(0).from_asset(model_path));
 
         commands
             .spawn((
                 PurchaseRing,
-                Name::new(definition.ring_name),
+                Name::new(ring_name),
                 Mesh3d(meshes.add(Torus {
                     minor_radius: stats.scale,
                     major_radius: stats.distance_from_origin,
@@ -153,11 +97,11 @@ fn setup(
             ))
             .observe(update_material_on::<Pointer<Out>>(transparent_mat.clone()))
             .observe(update_material_on::<Pointer<Over>>(hover_mat.clone()))
-            .observe(update_interface_state::<Pointer<Out>>(None))
-            .observe(update_interface_state::<Pointer<Over>>(Some(
+            .observe(set_hovered_automaton::<Pointer<Out>>(None))
+            .observe(set_hovered_automaton::<Pointer<Over>>(Some(
                 definition.variant,
             )))
-            .observe(purchase_automaton(definition.variant));
+            .observe(select_automaton(definition.variant));
     }
 }
 
@@ -171,19 +115,14 @@ fn update_material_on<E: EntityEvent>(
     }
 }
 
-fn update_interface_state<E: EntityEvent>(
-    new_hovered: Option<AutomatonVariant>,
-) -> impl Fn(On<E>, ResMut<crate::interface::InterfaceState>) {
-    move |_event, mut interface_state| {
-        interface_state.hovered_automaton = new_hovered;
-    }
-}
-
-fn purchase_automaton(
+fn select_automaton(
     variant: AutomatonVariant,
-) -> impl Fn(On<Pointer<Click>>, ResMut<crate::data::GameData>) {
-    move |_event, mut game_data| {
-        game_data.purchase_source(variant);
+) -> impl Fn(On<Pointer<Click>>, ResMut<InterfaceState>) {
+    move |event, mut interface_state| {
+        if event.button != PointerButton::Primary {
+            return;
+        }
+        interface_state.selected_automaton = Some(variant);
     }
 }
 
@@ -191,49 +130,83 @@ fn update_based_on_owned(
     mut commands: Commands,
     game_data: Res<crate::data::GameData>,
     asset_server: Res<AssetServer>,
-    mut automatons: Query<(&Automaton, &mut Transform)>,
+    mut automatons: Query<(Entity, &Automaton, &mut Transform)>,
 ) {
-    for definition in AUTOMATON_DEFINITIONS {
+    for definition in automaton_definitions() {
         let variant = definition.variant;
         let quantity_owned = game_data.get_quantity_owned_by_source(variant);
         let current_count = automatons
             .iter()
-            .filter(|(automaton, _)| automaton.source == variant)
+            .filter(|(_, automaton, _)| automaton.source == variant)
             .count() as u64;
 
-        if quantity_owned <= current_count {
+        if quantity_owned == current_count {
             continue;
         }
 
-        let stats = get_stats(variant);
-        for new_index in current_count..quantity_owned {
-            let scene: Handle<Scene> =
-                asset_server.load(GltfAssetLabel::Scene(0).from_asset(definition.model_path));
+        let stats = &definition.stats;
 
-            commands.spawn((
-                Name::new(definition.entity_name),
-                SceneRoot(scene),
-                Automaton::new(variant),
-                circle_transform(
-                    new_index,
+        if quantity_owned > current_count {
+            let model_path = definition
+                .model_path()
+                .expect("automaton definition should have a model path");
+            for new_index in current_count..quantity_owned {
+                let scene: Handle<Scene> =
+                    asset_server.load(GltfAssetLabel::Scene(0).from_asset(model_path.clone()));
+
+                commands.spawn((
+                    Name::new(definition.display_name),
+                    SceneRoot(scene),
+                    Automaton::new(variant),
+                    circle_transform(
+                        new_index,
+                        quantity_owned,
+                        stats.distance_from_origin,
+                        stats.scale,
+                    ),
+                ));
+            }
+
+            for (i, (_, _automaton, mut transform)) in automatons
+                .iter_mut()
+                .filter(|(_, automaton, _)| automaton.source == variant)
+                .enumerate()
+            {
+                *transform = circle_transform(
+                    i as u64,
                     quantity_owned,
                     stats.distance_from_origin,
                     stats.scale,
-                ),
-            ));
-        }
+                );
+            }
+        } else {
+            let mut to_remove = (current_count - quantity_owned) as usize;
+            let mut despawned: Vec<Entity> = Vec::with_capacity(to_remove);
+            for (entity, automaton, _) in automatons.iter() {
+                if to_remove == 0 {
+                    break;
+                }
+                if automaton.source == variant {
+                    commands.entity(entity).despawn();
+                    despawned.push(entity);
+                    to_remove -= 1;
+                }
+            }
 
-        for (i, (_automaton, mut transform)) in automatons
-            .iter_mut()
-            .filter(|(automaton, _)| automaton.source == variant)
-            .enumerate()
-        {
-            *transform = circle_transform(
-                i as u64,
-                quantity_owned,
-                stats.distance_from_origin,
-                stats.scale,
-            );
+            for (i, (_, _automaton, mut transform)) in automatons
+                .iter_mut()
+                .filter(|(entity, automaton, _)| {
+                    automaton.source == variant && !despawned.contains(entity)
+                })
+                .enumerate()
+            {
+                *transform = circle_transform(
+                    i as u64,
+                    quantity_owned,
+                    stats.distance_from_origin,
+                    stats.scale,
+                );
+            }
         }
     }
 }
@@ -244,7 +217,6 @@ pub fn update_automatons(
     mut data: ResMut<crate::data::GameData>,
     mut orbs: Query<(&mut Transform, &mut AutomatonOrb, &mut Visibility)>,
     interaction: Res<AudioChannel<crate::audio::InteractionChannel>>,
-    asset_server: Res<AssetServer>,
     audio_state: Res<crate::audio::AudioState>,
 ) {
     for (mut automaton, entity_transform) in automatons.iter_mut() {
@@ -253,12 +225,7 @@ pub fn update_automatons(
         } else {
             data.add_income(automaton.source, automaton.currency_per_tick);
 
-            // Play Pickup Sound if enabled
-            if audio_state.play_pickup {
-                interaction
-                    .play(asset_server.load(crate::audio::PICKUP_AUDIO))
-                    .with_playback_rate(0.75);
-            }
+            audio::play_pickup_sound(&interaction, &audio_state);
 
             automaton.time_left = automaton.cooldown;
             for (mut orb_transform, mut orb, _) in orbs.iter_mut() {
@@ -294,7 +261,7 @@ fn movement(mut query: Query<(&mut Transform, &Automaton)>, time: Res<Time>) {
     let nudge_recovery_duration = 0.5;
 
     for (mut transform, automaton) in query.iter_mut() {
-        let stats = get_stats(automaton.source);
+        let stats = automaton.source.stats();
         let angle = stats.rotation * time.delta_secs();
         let rot = Quat::from_rotation_y(angle);
         let new_translation = rot * transform.translation;
@@ -346,5 +313,20 @@ impl Default for AutomatonOrb {
 impl AutomatonOrb {
     pub fn update(&mut self, time: f32) {
         self.progress += time;
+    }
+}
+
+fn make_automaton_meshes_unpickable(
+    mut commands: Commands,
+    automatons: Query<Entity, With<Automaton>>,
+    children_query: Query<&Children>,
+    meshes: Query<Entity, (With<Mesh3d>, Without<Pickable>)>,
+) {
+    for automaton in &automatons {
+        for descendant in children_query.iter_descendants(automaton) {
+            if meshes.contains(descendant) {
+                commands.entity(descendant).insert(Pickable::IGNORE);
+            }
+        }
     }
 }

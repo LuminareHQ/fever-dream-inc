@@ -42,10 +42,7 @@ fn setup(
         commands.spawn((
             AutomatonOrb::default(),
             Name::new(format!("Orb {}", i)),
-            Mesh3d(meshes.add(Sphere {
-                radius: 0.05,
-                ..default()
-            })),
+            Mesh3d(meshes.add(Sphere { radius: 0.05 })),
             MeshMaterial3d(materials.add(StandardMaterial {
                 emissive: Color::srgb(8., 0., 0.).into(),
                 base_color: Srgba::rgb_u8(255, 0, 0).into(),

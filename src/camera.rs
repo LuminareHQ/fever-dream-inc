@@ -1,7 +1,9 @@
 use bevy::{
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
+    picking::hover::Hovered,
     post_process::bloom::Bloom,
     prelude::*,
+    ui_widgets::CoreSliderDragState,
 };
 use std::f32::consts::FRAC_PI_2;
 
@@ -83,22 +85,33 @@ fn orbit_camera(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     mouse_scroll: Res<AccumulatedMouseScroll>,
+    ui_interactions: Query<&Interaction>,
+    ui_hovered: Query<&Hovered>,
+    slider_drags: Query<&CoreSliderDragState>,
     mut query: Query<(&mut Transform, &mut OrbitCamera)>,
 ) {
     let delta = mouse_motion.delta; // pixels moved this frame
     let scroll = mouse_scroll.delta.y; // scroll lines this frame
 
+    let ui_active = ui_interactions
+        .iter()
+        .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered))
+        || ui_hovered.iter().any(|h| h.get())
+        || slider_drags.iter().any(|d| d.dragging);
+
     for (mut transform, mut cam) in &mut query {
-        // --- Orbit: right mouse button + drag ---
-        if mouse_buttons.pressed(MouseButton::Left) {
+        // --- Orbit: left mouse button + drag (suppressed while interacting with UI) ---
+        if mouse_buttons.pressed(MouseButton::Left) && !ui_active {
             cam.yaw -= delta.x * cam.orbit_sensitivity;
             cam.pitch -= delta.y * cam.orbit_sensitivity;
             // Clamp pitch to avoid flipping (just under ±90°).
             cam.pitch = cam.pitch.clamp(-FRAC_PI_2 + 0.05, -0.25);
         }
 
-        // --- Dolly arm: scroll wheel ---
-        cam.distance -= scroll * cam.dolly_sensitivity;
+        // --- Dolly arm: scroll wheel (suppressed while hovering UI) ---
+        if !ui_active {
+            cam.distance -= scroll * cam.dolly_sensitivity;
+        }
         cam.distance = cam.distance.clamp(cam.min_distance, cam.max_distance);
 
         // --- Reconstruct transform from spherical coords ---

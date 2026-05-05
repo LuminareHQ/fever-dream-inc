@@ -29,15 +29,12 @@ bevy = { version = "0.18.0", default-features = false, features = [
     "wav",
 ] }
 bevy_kira_audio = { version = "0.25.0", features = ["mp3", "wav"] }
-getrandom = "0.4.1"
-rand = "0.10.0"
-rhai = "1.24.0"
+getrandom = "0.4.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149" }
 
 
 [target.'cfg(all(target_family = "wasm", any(target_os = "unknown", target_os = "none")))'.dependencies]
-getrandom = { version = "0.4.1", features = ["wasm_js"] }
-getrandom_02 = { version = "0.2", features = ["js"], package = "getrandom" }
+getrandom = { version = "0.4.2", features = ["wasm_js"] }
 js-sys = "0.3.85"
-web-sys = { version = "0.3.85", features = ["Window", "Storage"]}
+web-sys = { version = "0.3.85", features = ["Window", "Storage"] }

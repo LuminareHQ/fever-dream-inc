@@ -3,11 +3,11 @@ use bevy::{input_focus::InputFocus, picking::mesh_picking::MeshPickingPlugin, pr
 mod audio;
 mod automatons;
 mod camera;
-mod config;
 mod data;
 mod environment;
 mod interface;
 mod portal;
+mod rand;
 
 fn main() {
     let mut app = App::new();

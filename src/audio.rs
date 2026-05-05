@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::*;
 
+use crate::rand;
+
 pub struct AudioPlugin;
 
-static BACKGROUND_AUDIO: [&str; 14] = [
+const BACKGROUND_AUDIO: [&str; 14] = [
     "audio/Dark Fantasy Studio- Witchcraft/mp3/1-Dark Fantasy Studio- The story behind her smile.mp3",
     "audio/Dark Fantasy Studio- Witchcraft/mp3/2-Dark Fantasy Studio- Communication.mp3",
     "audio/Dark Fantasy Studio- Witchcraft/mp3/3-Dark Fantasy Studio-  I'm sorry.mp3",
@@ -20,13 +22,13 @@ static BACKGROUND_AUDIO: [&str; 14] = [
     "audio/Dark Fantasy Studio- Witchcraft/mp3/14-Dark Fantasy Studio- Past and secrets.mp3",
 ];
 
-pub static PICKUP_AUDIO: &str =
+const PICKUP_AUDIO: &str =
     "audio/splice/ESM_Scifi_UI_Button_Glitch_Morph_Mechanism_Texture_Futuristic.wav";
 
 #[derive(Resource, Debug)]
 pub struct AudioState {
     pub volume: f32,
-    pub pickup_handle: Option<Handle<bevy_kira_audio::AudioSource>>,
+    pickup_handle: Handle<bevy_kira_audio::AudioSource>,
     pub play_pickup: bool,
     pub current_track: usize,
     pub current_track_handle: Option<Handle<AudioInstance>>,
@@ -53,7 +55,7 @@ pub fn start_background_audio(
     interaction: Res<AudioChannel<InteractionChannel>>,
     game_data: Res<crate::data::GameData>,
 ) {
-    let pickup_handle = Some(asset_server.load(PICKUP_AUDIO));
+    let pickup_handle = asset_server.load(PICKUP_AUDIO);
     interaction.set_volume(-55.0);
 
     let current_track = rand::random_range(0..BACKGROUND_AUDIO.len());
@@ -72,20 +74,28 @@ pub fn start_background_audio(
     });
 }
 
+pub fn play_pickup_sound(interaction: &AudioChannel<InteractionChannel>, state: &AudioState) {
+    if state.play_pickup {
+        interaction
+            .play(state.pickup_handle.clone())
+            .with_playback_rate(0.75);
+    }
+}
+
 fn play_next_track_on_end(
     audio: Res<Audio>,
     mut state: ResMut<AudioState>,
     asset_server: Res<AssetServer>,
 ) {
-    if let Some(handle) = &state.current_track_handle {
-        if audio.state(handle) == PlaybackState::Stopped {
-            state.current_track = (state.current_track + 1) % BACKGROUND_AUDIO.len();
-            state.current_track_handle = Some(
-                audio
-                    .play(asset_server.load(BACKGROUND_AUDIO[state.current_track]))
-                    .handle(),
-            );
-        }
+    if let Some(handle) = &state.current_track_handle
+        && audio.state(handle) == PlaybackState::Stopped
+    {
+        state.current_track = (state.current_track + 1) % BACKGROUND_AUDIO.len();
+        state.current_track_handle = Some(
+            audio
+                .play(asset_server.load(BACKGROUND_AUDIO[state.current_track]))
+                .handle(),
+        );
     }
 }
 

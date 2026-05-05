@@ -1,12 +1,11 @@
 use crate::{
     audio::AudioState,
-    automatons::{is_automaton_variant, previous_automaton_variant},
-    config::get_stats,
-    data::{AutomatonVariant, GameData},
+    data::{AutomatonVariant, GameData, UnlockRequirement},
 };
 use bevy::{
     color::palettes::css::WHITE,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    ecs::system::SystemParam,
     input_focus::{
         InputDispatchPlugin,
         tab_navigation::{TabGroup, TabIndex, TabNavigationPlugin},
@@ -21,9 +20,11 @@ use bevy::{
 };
 
 static SCORE_FONT_SIZE: f32 = 32.0;
-static OTHER_TEXT_FONT_SIZE: f32 = 24.0;
 static CONTROL_TITLE_FONT_SIZE: f32 = 22.0;
 static CONTROL_TEXT_FONT_SIZE: f32 = 18.0;
+static VARIANT_PANEL_BUTTON_FONT_SIZE: f32 = 14.0;
+static VARIANT_PANEL_STAT_FONT_SIZE: f32 = 14.0;
+const VARIANT_PANEL_STAT_WIDTH: f32 = 110.0;
 static FONT_PATH: &str = "fonts/Squada_One/SquadaOne-Regular.ttf";
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.03, 0.02, 0.04, 1.0);
@@ -47,28 +48,63 @@ impl Plugin for InterfacePlugin {
             InputDispatchPlugin,
             TabNavigationPlugin,
         ));
-        app.insert_resource(InterfaceState {
-            hovered_automaton: None,
-        });
+        app.insert_resource(InterfaceState::default());
         app.add_systems(Startup, setup.after(crate::audio::start_background_audio));
         app.add_systems(
             Update,
             (
-                update_interface,
+                update_score,
+                update_variant_panel,
                 sync_audio_controls,
                 update_music_volume_slider_style,
                 update_interaction_sound_checkbox_style,
                 update_audio_panel_visibility,
             ),
         );
-        app.add_systems(Update, buttons);
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct InterfaceState {
     pub hovered_automaton: Option<AutomatonVariant>,
+    /// Currently-selected variant. Set when a player clicks a purchase ring;
+    /// cleared by the close button or by clicking outside the panel.
+    pub selected_automaton: Option<AutomatonVariant>,
 }
+
+pub fn set_hovered_automaton<E: EntityEvent>(
+    new_hovered: Option<AutomatonVariant>,
+) -> impl Fn(On<E>, ResMut<InterfaceState>) {
+    move |_event, mut interface_state| {
+        interface_state.hovered_automaton = new_hovered;
+    }
+}
+
+#[derive(Component)]
+struct VariantPanel;
+
+#[derive(Component)]
+struct VariantPanelTitle;
+
+#[derive(Component)]
+struct VariantPanelStat(VariantStat);
+
+#[derive(Clone, Copy)]
+enum VariantStat {
+    Owned,
+    Generated,
+    Rate,
+    Level,
+}
+
+#[derive(Component, Clone, Copy)]
+enum VariantPanelButton {
+    Summon,
+    LevelUp,
+}
+
+#[derive(Component)]
+struct VariantPanelButtonLabel;
 
 #[derive(Component)]
 struct AudioControlPanel;
@@ -80,11 +116,14 @@ struct AudioControlPanelExpanded;
 struct AudioControlPanelCollapsed;
 
 #[derive(Component)]
+struct AudioControlPanelGearIcon;
+
+#[derive(Component)]
 struct AudioPanelAnim {
     progress: f32,
 }
 
-const AUDIO_PANEL_COLLAPSED_SIZE: f32 = 22.0;
+const AUDIO_PANEL_COLLAPSED_SIZE: f32 = 32.0;
 const AUDIO_PANEL_EXPANDED_WIDTH: f32 = 286.0;
 const AUDIO_PANEL_EXPANDED_HEIGHT: f32 = 110.0;
 const AUDIO_PANEL_ANIM_SPEED: f32 = 6.0;
@@ -113,82 +152,95 @@ struct InteractionSoundCheckboxMark;
 #[derive(Component)]
 struct InteractionSoundValueText;
 
+type MusicVolumeSliderThumbQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Node, &'static mut BackgroundColor),
+    (With<MusicVolumeSliderThumb>, Without<MusicVolumeSliderFill>),
+>;
+
+type MusicVolumeSliderFillQuery<'w, 's> = Query<
+    'w,
+    's,
+    &'static mut Node,
+    (With<MusicVolumeSliderFill>, Without<MusicVolumeSliderThumb>),
+>;
+
+type AudioPanelQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Hovered,
+        &'static mut AudioPanelAnim,
+        &'static mut Node,
+    ),
+    (
+        With<AudioControlPanel>,
+        Without<AudioControlPanelExpanded>,
+        Without<AudioControlPanelCollapsed>,
+    ),
+>;
+
+type ExpandedAudioPanelQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static mut Node),
+    (
+        With<AudioControlPanelExpanded>,
+        Without<AudioControlPanelCollapsed>,
+        Without<AudioControlPanel>,
+    ),
+>;
+
+type CollapsedAudioPanelQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Node, Option<&'static Children>),
+    (
+        With<AudioControlPanelCollapsed>,
+        Without<AudioControlPanelExpanded>,
+        Without<AudioControlPanel>,
+    ),
+>;
+
+#[derive(SystemParam)]
+struct AudioPanelVisibilityQueries<'w, 's> {
+    windows: Query<'w, 's, &'static Window>,
+    panels: AudioPanelQuery<'w, 's>,
+    children: Query<'w, 's, &'static Children>,
+    expanded: ExpandedAudioPanelQuery<'w, 's>,
+    collapsed: CollapsedAudioPanelQuery<'w, 's>,
+    text_colors: Query<'w, 's, &'static mut TextColor>,
+    gear_icons: Query<'w, 's, &'static mut ImageNode, With<AudioControlPanelGearIcon>>,
+}
+
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, audio_state: Res<AudioState>) {
     let font_handle = asset_server.load(FONT_PATH);
+    let gear_icon: Handle<Image> = asset_server.load("icons/gear.png");
 
-    commands
-        .spawn((
-            Node {
-                padding: UiRect::all(px(4)),
-                width: percent(100),
-                height: percent(100),
-                display: Display::Flex,
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Start,
-                justify_content: JustifyContent::Start,
+    commands.spawn((
+        Node {
+            padding: UiRect::all(px(8)),
+            ..default()
+        },
+        Pickable::IGNORE,
+        children![(
+            TextLayout::new_with_justify(Justify::Center),
+            Name::new("score_text"),
+            TextFont {
+                font: font_handle.clone(),
+                font_size: SCORE_FONT_SIZE,
                 ..default()
             },
-            children![
-                (
-                    TextLayout::new_with_justify(Justify::Center),
-                    Name::new("score_text"),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: SCORE_FONT_SIZE,
-                        ..default()
-                    },
-                    Text::new("00.00"),
-                    TextColor(WHITE.into()),
-                ),
-                (
-                    TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automaton_name_quantity_text"),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: OTHER_TEXT_FONT_SIZE,
-                        ..default()
-                    },
-                    Text::new("00.00"),
-                    TextColor(WHITE.into()),
-                ),
-                (
-                    TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automoton_total_text"),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: OTHER_TEXT_FONT_SIZE,
-                        ..default()
-                    },
-                    Text::new("00.00"),
-                    TextColor(WHITE.into()),
-                ),
-                (
-                    TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automoton_rate_text"),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: OTHER_TEXT_FONT_SIZE,
-                        ..default()
-                    },
-                    Text::new("00.00"),
-                    TextColor(WHITE.into()),
-                ),
-                (
-                    TextLayout::new_with_justify(Justify::Center),
-                    Name::new("hovered_automaton_cost_text"),
-                    TextFont {
-                        font: font_handle.clone(),
-                        font_size: OTHER_TEXT_FONT_SIZE,
-                        ..default()
-                    },
-                    Text::new("00.00"),
-                    TextColor(WHITE.into()),
-                ),
-            ],
-        ))
-        .insert(Pickable::IGNORE);
+            Text::new("00.00"),
+            TextColor(WHITE.into()),
+            Pickable::IGNORE,
+        )],
+    ));
 
-    spawn_audio_controls(&mut commands, &font_handle, &audio_state);
+    spawn_variant_panel(&mut commands, &font_handle);
+    spawn_audio_controls(&mut commands, &font_handle, &gear_icon, &audio_state);
 
     // Only show the FPS counter in debug mode
     #[cfg(debug_assertions)]
@@ -203,7 +255,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, audio_state: Re
             children![(
                 TextLayout::new_with_justify(Justify::Center),
                 Name::new("fps_text"),
-                Text::new("FPS: 0.00"),
+                Text::new("FPS: 0"),
                 TextColor(WHITE.into()),
             ),],
         ));
@@ -213,6 +265,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, audio_state: Re
 fn spawn_audio_controls(
     commands: &mut Commands,
     font_handle: &Handle<Font>,
+    gear_icon: &Handle<Image>,
     audio_state: &AudioState,
 ) {
     commands
@@ -254,11 +307,14 @@ fn spawn_audio_controls(
                     },
                 ))
                 .with_children(|btn| {
-                    btn.spawn(control_text(
-                        font_handle,
-                        "\u{2699}",
-                        CONTROL_TEXT_FONT_SIZE,
-                        CONTROL_TEXT,
+                    btn.spawn((
+                        AudioControlPanelGearIcon,
+                        Node {
+                            width: px(32),
+                            height: px(32),
+                            ..default()
+                        },
+                        ImageNode::new(gear_icon.clone()).with_color(CONTROL_TEXT),
                     ));
                 });
 
@@ -281,117 +337,116 @@ fn spawn_audio_controls(
                         CONTROL_TEXT,
                     ));
 
-            expanded
-                .spawn((
-                    Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    row.spawn((
+                    expanded
+                        .spawn((Node {
+                            width: percent(100),
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: px(8),
+                            ..default()
+                        },))
+                        .with_children(|row| {
+                            row.spawn((
+                                Node {
+                                    width: px(52),
+                                    ..default()
+                                },
+                                control_text(
+                                    font_handle,
+                                    "Music",
+                                    CONTROL_TEXT_FONT_SIZE,
+                                    CONTROL_MUTED_TEXT,
+                                ),
+                            ));
+                            row.spawn(music_volume_slider(audio_state.volume));
+                            row.spawn((
+                                Node {
+                                    width: px(42),
+                                    justify_content: JustifyContent::FlexEnd,
+                                    ..default()
+                                },
+                                MusicVolumeValueText,
+                                control_text(
+                                    font_handle,
+                                    music_volume_label(audio_state.volume),
+                                    CONTROL_TEXT_FONT_SIZE,
+                                    CONTROL_TEXT,
+                                ),
+                            ));
+                        });
+
+                    let mut checkbox = expanded.spawn((
                         Node {
-                            width: px(52),
+                            width: percent(100),
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: px(8),
                             ..default()
                         },
-                        control_text(
+                        InteractionSoundCheckbox,
+                        Checkbox,
+                        Hovered::default(),
+                        TabIndex(1),
+                        observe(update_interaction_sound_from_checkbox),
+                    ));
+                    if audio_state.play_pickup {
+                        checkbox.insert(Checked);
+                    }
+                    checkbox.with_children(|row| {
+                        row.spawn((
+                            InteractionSoundCheckboxBox,
+                            Node {
+                                width: px(16),
+                                height: px(16),
+                                margin: UiRect::right(px(8)),
+                                border: UiRect::all(px(2)),
+                                border_radius: BorderRadius::all(px(3)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            BorderColor::all(CHECKBOX_BORDER),
+                        ))
+                        .with_children(|checkbox_box| {
+                            checkbox_box.spawn((
+                                InteractionSoundCheckboxMark,
+                                Node {
+                                    width: px(8),
+                                    height: px(8),
+                                    border_radius: BorderRadius::all(px(2)),
+                                    ..default()
+                                },
+                                BackgroundColor(if audio_state.play_pickup {
+                                    CONTROL_ACCENT
+                                } else {
+                                    CLEAR
+                                }),
+                            ));
+                        });
+                        row.spawn(control_text(
                             font_handle,
-                            "Music",
+                            "Interaction Sound",
                             CONTROL_TEXT_FONT_SIZE,
                             CONTROL_MUTED_TEXT,
-                        ),
-                    ));
-                    row.spawn(music_volume_slider(audio_state.volume));
-                    row.spawn((
-                        Node {
-                            width: px(42),
-                            justify_content: JustifyContent::FlexEnd,
-                            ..default()
-                        },
-                        MusicVolumeValueText,
-                        control_text(
-                            font_handle,
-                            music_volume_label(audio_state.volume),
-                            CONTROL_TEXT_FONT_SIZE,
-                            CONTROL_TEXT,
-                        ),
-                    ));
-                });
-
-            let mut checkbox = expanded.spawn((
-                Node {
-                    width: percent(100),
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                    ..default()
-                },
-                InteractionSoundCheckbox,
-                Checkbox,
-                Hovered::default(),
-                TabIndex(1),
-                observe(update_interaction_sound_from_checkbox),
-            ));
-            if audio_state.play_pickup {
-                checkbox.insert(Checked);
-            }
-            checkbox.with_children(|row| {
-                row.spawn((
-                    InteractionSoundCheckboxBox,
-                    Node {
-                        width: px(16),
-                        height: px(16),
-                        margin: UiRect::right(px(8)),
-                        border: UiRect::all(px(2)),
-                        border_radius: BorderRadius::all(px(3)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BorderColor::all(CHECKBOX_BORDER),
-                ))
-                .with_children(|checkbox_box| {
-                    checkbox_box.spawn((
-                        InteractionSoundCheckboxMark,
-                        Node {
-                            width: px(8),
-                            height: px(8),
-                            border_radius: BorderRadius::all(px(2)),
-                            ..default()
-                        },
-                        BackgroundColor(if audio_state.play_pickup {
-                            CONTROL_ACCENT
-                        } else {
-                            CLEAR
-                        }),
-                    ));
-                });
-                row.spawn(control_text(
-                    font_handle,
-                    "Interaction Sound",
-                    CONTROL_TEXT_FONT_SIZE,
-                    CONTROL_MUTED_TEXT,
-                ));
-                row.spawn((
-                    Node {
-                        margin: UiRect::left(auto()),
-                        width: px(28),
-                        justify_content: JustifyContent::FlexEnd,
-                        ..default()
-                    },
-                    InteractionSoundValueText,
-                    control_text(
-                        font_handle,
-                        interaction_sound_label(audio_state.play_pickup),
-                        CONTROL_TEXT_FONT_SIZE,
-                        CONTROL_TEXT,
-                    ),
-                ));
-            });
+                        ));
+                        row.spawn((
+                            Node {
+                                margin: UiRect::left(auto()),
+                                width: px(28),
+                                justify_content: JustifyContent::FlexEnd,
+                                ..default()
+                            },
+                            InteractionSoundValueText,
+                            control_text(
+                                font_handle,
+                                interaction_sound_label(audio_state.play_pickup),
+                                CONTROL_TEXT_FONT_SIZE,
+                                CONTROL_TEXT,
+                            ),
+                        ));
+                    });
                 });
         });
 }
@@ -576,11 +631,8 @@ fn update_music_volume_slider_style(
         With<MusicVolumeSlider>,
     >,
     children: Query<&Children>,
-    mut thumbs: Query<
-        (&mut Node, &mut BackgroundColor),
-        (With<MusicVolumeSliderThumb>, Without<MusicVolumeSliderFill>),
-    >,
-    mut fills: Query<&mut Node, (With<MusicVolumeSliderFill>, Without<MusicVolumeSliderThumb>)>,
+    mut thumbs: MusicVolumeSliderThumbQuery<'_, '_>,
+    mut fills: MusicVolumeSliderFillQuery<'_, '_>,
 ) {
     for (slider, value, range, hovered, drag_state) in &sliders {
         let amount = range.thumb_position(value.0).clamp(0.0, 1.0);
@@ -634,176 +686,77 @@ fn interaction_sound_label(play_pickup: bool) -> &'static str {
     if play_pickup { "On" } else { "Off" }
 }
 
-fn update_interface(
+fn update_score(
     data: Res<GameData>,
     diagnostics: Res<DiagnosticsStore>,
+    time: Res<Time>,
+    mut fps_refresh: Local<f32>,
+    mut fps_display: Local<Option<f64>>,
     mut query: Query<(&mut Text, &Name), With<Name>>,
-    interface_data: Res<InterfaceState>,
 ) {
-    let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS);
-
-    let hovered_rate: f64 = match interface_data.hovered_automaton {
-        Some(variant) => {
-            use crate::config::get_stats;
-
-            let currency_per_tick = get_stats(variant).currency_per_tick as f64;
-            let ticks_per_second = 1.0 / get_stats(variant).cooldown as f64;
-            currency_per_tick * ticks_per_second * data.get_quantity_owned_by_source(variant) as f64
+    const FPS_REFRESH_INTERVAL: f32 = 0.5;
+    *fps_refresh -= time.delta_secs();
+    let fps = if *fps_refresh <= 0.0 {
+        *fps_refresh = FPS_REFRESH_INTERVAL;
+        let value = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FPS)
+            .and_then(|d| d.smoothed());
+        if value.is_some() {
+            *fps_display = value;
         }
-        None => 0.0,
+        *fps_display
+    } else {
+        *fps_display
     };
 
     for (mut text, name) in query.iter_mut() {
         match name.as_str() {
             "score_text" => text.0 = format!("{:.2}", data.get_currency()),
-            "hovered_automaton_name_quantity_text" => {
-                if let Some(source) = interface_data.hovered_automaton {
-                    if source != AutomatonVariant::Portal {
-                        text.0 =
-                            format!("{} {}s", data.get_quantity_owned_by_source(source), source);
-                    } else {
-                        text.0 = "The Portal".to_string();
-                    }
-                } else {
-                    text.0 = "".to_string();
-                }
-            }
-            "hovered_automoton_total_text" => {
-                if let Some(source) = interface_data.hovered_automaton {
-                    text.0 = format!("Generated: {}", data.get_currency_by_source(source));
-                } else {
-                    text.0 = "".to_string();
-                }
-            }
-            "hovered_automoton_rate_text" => {
-                if let Some(source) = interface_data.hovered_automaton {
-                    if source != AutomatonVariant::Portal {
-                        text.0 = format!("Rate: {}/s", format!("{:.2}", hovered_rate),);
-                    }
-                } else {
-                    text.0 = "".to_string();
-                }
-            }
-            "hovered_automaton_cost_text" => {
-                if let Some(source) = interface_data.hovered_automaton {
-                    if source != AutomatonVariant::Portal {
-                        if prerequisites_met(source, &data) {
-                            text.0 = format!("Summon For {}", data.get_cost_to_add_source(source));
-                        } else {
-                            text.0 = prereq_not_met(source);
-                        }
-                    }
-                } else {
-                    text.0 = "".to_string();
-                }
-            }
             "fps_text" => {
-                if let Some(fps) = fps.and_then(|d| d.value()) {
-                    text.0 = format!("FPS: {:.2}", fps);
+                if let Some(fps) = fps {
+                    text.0 = format!("FPS: {:.0}", fps);
                 }
             }
-            _ => {
-                error!("Unknown text element with name: {}", name);
-            }
+            _ => {}
         }
     }
 }
 
-fn buttons(
-    mut interaction_query: Query<(Entity, &Interaction, &Name), Changed<Interaction>>,
-    mut game_data: ResMut<GameData>,
-) {
-    for (_, interaction, name) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => match name.as_str() {
-                "hellmite_quantity" => {
-                    if game_data.can_afford_source(crate::data::AutomatonVariant::Hellmite) {
-                        game_data.purchase_source(crate::data::AutomatonVariant::Hellmite);
-                    }
-                }
-                _ => {
-                    error!("Unknown button with name: {}", name);
-                }
-            },
-            Interaction::Hovered => {}
-            Interaction::None => {}
-        }
-    }
-}
-
-pub fn prerequisites_met(variant: AutomatonVariant, game_data: &GameData) -> bool {
-    if !is_automaton_variant(variant) {
-        return false;
-    }
-
-    let required_previous = get_stats(variant).required_previous;
-    if let Some(previous) = previous_automaton_variant(variant) {
-        game_data.get_quantity_owned_by_source(previous) >= required_previous
-    } else {
-        game_data.get_currency() >= required_previous
-            || game_data.get_quantity_owned_by_source(variant) > 0
-    }
-}
-
-fn prereq_not_met(variant: AutomatonVariant) -> String {
-    let required_previous = get_stats(variant).required_previous;
-    if let Some(previous) = previous_automaton_variant(variant) {
-        format!(
+fn prereq_not_met(variant: AutomatonVariant, game_data: &GameData) -> String {
+    match game_data.unmet_unlock_requirement(variant) {
+        Some(UnlockRequirement::PreviousAutomaton {
+            variant: required_variant,
+            quantity,
+        }) => format!(
             "Requires {} {}",
-            required_previous,
-            automaton_quantity_label(previous, required_previous)
-        )
-    } else if is_automaton_variant(variant) {
-        format!("Requires {} Entropy", required_previous)
-    } else {
-        "Unknown automaton".to_string()
-    }
-}
-
-fn automaton_quantity_label(variant: AutomatonVariant, quantity: u64) -> String {
-    if quantity == 1 {
-        variant.to_string()
-    } else {
-        format!("{}s", variant)
+            quantity,
+            required_variant.label_for_quantity(quantity)
+        ),
+        Some(UnlockRequirement::FirstPurchaseCost) => {
+            format!(
+                "Requires {} Entropy",
+                game_data.get_cost_to_add_source(variant)
+            )
+        }
+        Some(UnlockRequirement::None) | None => "Locked".to_string(),
     }
 }
 
 fn update_audio_panel_visibility(
     time: Res<Time>,
-    windows: Query<&Window>,
-    mut panel_query: Query<
-        (Entity, &Hovered, &mut AudioPanelAnim, &mut Node),
-        (
-            With<AudioControlPanel>,
-            Without<AudioControlPanelExpanded>,
-            Without<AudioControlPanelCollapsed>,
-        ),
-    >,
-    children_query: Query<&Children>,
-    mut expanded_query: Query<
-        &mut Node,
-        (
-            With<AudioControlPanelExpanded>,
-            Without<AudioControlPanelCollapsed>,
-            Without<AudioControlPanel>,
-        ),
-    >,
-    mut collapsed_query: Query<
-        (&mut Node, Option<&Children>),
-        (
-            With<AudioControlPanelCollapsed>,
-            Without<AudioControlPanelExpanded>,
-            Without<AudioControlPanel>,
-        ),
-    >,
-    mut text_color_query: Query<&mut TextColor>,
+    mut queries: AudioPanelVisibilityQueries<'_, '_>,
 ) {
     let dt = time.delta_secs();
-    let cursor_in_window = windows
+    let cursor_in_window = queries
+        .windows
         .iter()
         .any(|w| w.cursor_position().is_some());
-    for (panel_entity, hovered, mut anim, mut panel_node) in &mut panel_query {
-        let target = if cursor_in_window && hovered.get() { 1.0 } else { 0.0 };
+    for (panel_entity, hovered, mut anim, mut panel_node) in &mut queries.panels {
+        let target = if cursor_in_window && hovered.get() {
+            1.0
+        } else {
+            0.0
+        };
         let delta = (target - anim.progress) * AUDIO_PANEL_ANIM_SPEED * dt;
         anim.progress = (anim.progress + delta).clamp(0.0, 1.0);
         if (target - anim.progress).abs() < 0.001 {
@@ -816,15 +769,17 @@ fn update_audio_panel_visibility(
         panel_node.width = px(width);
         panel_node.height = px(height);
 
-        for child in children_query.iter_descendants(panel_entity) {
-            if let Ok(mut node) = expanded_query.get_mut(child) {
+        let mut expanded_entity: Option<Entity> = None;
+        for child in queries.children.iter_descendants(panel_entity) {
+            if let Ok((entity, mut node)) = queries.expanded.get_mut(child) {
                 node.display = if anim.progress > 0.001 {
                     Display::Flex
                 } else {
                     Display::None
                 };
+                expanded_entity = Some(entity);
             }
-            if let Ok((mut node, btn_children)) = collapsed_query.get_mut(child) {
+            if let Ok((mut node, btn_children)) = queries.collapsed.get_mut(child) {
                 node.display = if anim.progress < 0.999 {
                     Display::Flex
                 } else {
@@ -833,10 +788,22 @@ fn update_audio_panel_visibility(
                 let alpha = 1.0 - t;
                 if let Some(btn_children) = btn_children {
                     for c in btn_children.iter() {
-                        if let Ok(mut color) = text_color_query.get_mut(c) {
+                        if let Ok(mut color) = queries.text_colors.get_mut(c) {
                             color.0 = CONTROL_TEXT.with_alpha(alpha);
                         }
+                        if let Ok(mut image) = queries.gear_icons.get_mut(c) {
+                            image.color = CONTROL_TEXT.with_alpha(alpha);
+                        }
                     }
+                }
+            }
+        }
+
+        if let Some(expanded_entity) = expanded_entity {
+            for descendant in queries.children.iter_descendants(expanded_entity) {
+                if let Ok(mut color) = queries.text_colors.get_mut(descendant) {
+                    let base = color.0;
+                    color.0 = base.with_alpha(t);
                 }
             }
         }
@@ -852,5 +819,352 @@ fn ease_in_out(t: f32) -> f32 {
         2.0 * t * t
     } else {
         1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+    }
+}
+
+fn spawn_variant_panel(commands: &mut Commands, font_handle: &Handle<Font>) {
+    commands
+        .spawn((
+            VariantPanel,
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(16),
+                left: percent(50),
+                margin: UiRect::left(px(-360)),
+                width: px(720),
+                padding: UiRect::all(px(14)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(6)),
+                display: Display::None,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                column_gap: px(16),
+                ..default()
+            },
+            BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(PANEL_BORDER),
+        ))
+        .with_children(|panel| {
+            // Left column: title + stats
+            panel
+                .spawn(Node {
+                    flex_grow: 1.0,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(6),
+                    ..default()
+                })
+                .with_children(|info| {
+                    info.spawn((
+                        VariantPanelTitle,
+                        TextLayout::new_with_justify(Justify::Left).with_no_wrap(),
+                        TextFont {
+                            font: font_handle.clone(),
+                            font_size: CONTROL_TITLE_FONT_SIZE,
+                            ..default()
+                        },
+                        Text::new(""),
+                        TextColor(CONTROL_TEXT),
+                        Pickable::IGNORE,
+                    ));
+
+                    info.spawn(Node {
+                        width: percent(100),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: px(8),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        for stat in [
+                            VariantStat::Owned,
+                            VariantStat::Generated,
+                            VariantStat::Rate,
+                            VariantStat::Level,
+                        ] {
+                            row.spawn((
+                                Node {
+                                    width: px(VARIANT_PANEL_STAT_WIDTH),
+                                    flex_shrink: 0.0,
+                                    flex_grow: 0.0,
+                                    overflow: Overflow::clip(),
+                                    ..default()
+                                },
+                                Pickable::IGNORE,
+                            ))
+                            .with_children(|slot| {
+                                slot.spawn((
+                                    VariantPanelStat(stat),
+                                    TextLayout::new_with_justify(Justify::Left).with_no_wrap(),
+                                    TextFont {
+                                        font: font_handle.clone(),
+                                        font_size: VARIANT_PANEL_STAT_FONT_SIZE,
+                                        ..default()
+                                    },
+                                    Text::new(""),
+                                    TextColor(CONTROL_MUTED_TEXT),
+                                    Pickable::IGNORE,
+                                ));
+                            });
+                        }
+                    });
+                });
+
+            // Right column: action buttons stacked vertically
+            panel
+                .spawn(Node {
+                    width: px(200),
+                    flex_shrink: 0.0,
+                    flex_grow: 0.0,
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    row_gap: px(8),
+                    ..default()
+                })
+                .with_children(|actions| {
+                    for action in [VariantPanelButton::Summon, VariantPanelButton::LevelUp] {
+                        actions
+                            .spawn((
+                                action,
+                                Node {
+                                    width: percent(100),
+                                    padding: UiRect::axes(px(10), px(8)),
+                                    border: UiRect::all(px(1)),
+                                    border_radius: BorderRadius::all(px(4)),
+                                    display: Display::Flex,
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    overflow: Overflow::clip(),
+                                    ..default()
+                                },
+                                BackgroundColor(PANEL_BACKGROUND),
+                                BorderColor::all(PANEL_BORDER),
+                                Hovered::default(),
+                                observe(on_variant_panel_button),
+                            ))
+                            .with_children(|btn| {
+                                btn.spawn((
+                                    VariantPanelButtonLabel,
+                                    TextLayout::new_with_justify(Justify::Center).with_no_wrap(),
+                                    TextFont {
+                                        font: font_handle.clone(),
+                                        font_size: VARIANT_PANEL_BUTTON_FONT_SIZE,
+                                        ..default()
+                                    },
+                                    Text::new(""),
+                                    TextColor(CONTROL_TEXT),
+                                    Pickable::IGNORE,
+                                ));
+                            });
+                    }
+                });
+        });
+}
+
+fn update_variant_panel(
+    interface_data: Res<InterfaceState>,
+    data: Res<GameData>,
+    mut panels: Query<&mut Node, With<VariantPanel>>,
+    mut titles: Query<&mut Text, With<VariantPanelTitle>>,
+    mut stats: Query<
+        (&VariantPanelStat, &mut Text),
+        (Without<VariantPanelTitle>, Without<VariantPanelButtonLabel>),
+    >,
+    mut buttons: Query<
+        (
+            &VariantPanelButton,
+            &Hovered,
+            &mut Node,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        Without<VariantPanel>,
+    >,
+    mut button_labels: Query<
+        &mut Text,
+        (
+            With<VariantPanelButtonLabel>,
+            Without<VariantPanelTitle>,
+            Without<VariantPanelStat>,
+        ),
+    >,
+    mut label_colors: Query<&mut TextColor, With<VariantPanelButtonLabel>>,
+) {
+    let Some(source) = interface_data.selected_automaton else {
+        for mut node in &mut panels {
+            node.display = Display::None;
+        }
+        return;
+    };
+
+    for mut node in &mut panels {
+        node.display = Display::Flex;
+    }
+
+    let quantity = data.get_quantity_owned_by_source(source);
+    for mut text in &mut titles {
+        text.0 = if source.is_automaton() {
+            source.label_for_quantity(quantity).to_string()
+        } else {
+            "The Portal".to_string()
+        };
+    }
+
+    let level = data.get_level(source);
+    let multiplier = data.level_multiplier(source);
+    let rate = data.rate_per_second_by_source(source);
+    let generated = data.get_currency_by_source(source);
+    let prereq_met = source.is_automaton() && data.prerequisites_met(source);
+    let summon_cost = data.get_cost_to_add_source(source);
+    let summon_affordable = source.is_automaton() && prereq_met && data.can_afford_source(source);
+    let level_up_cost = data.cost_to_level_up(source);
+    let level_up_affordable = data.can_level_up(source);
+
+    for (kind, mut text) in &mut stats {
+        text.0 = match kind.0 {
+            VariantStat::Owned => {
+                if source.is_automaton() {
+                    format!("Owned: {}", quantity)
+                } else {
+                    "".into()
+                }
+            }
+            VariantStat::Generated => format!("Generated: {}", generated),
+            VariantStat::Rate => {
+                if source.is_automaton() {
+                    format!("Rate: {:.2}/s", rate)
+                } else {
+                    "".into()
+                }
+            }
+            VariantStat::Level => {
+                if source.is_automaton() {
+                    format!("Level {} (x{:.2})", level, multiplier)
+                } else {
+                    "".into()
+                }
+            }
+        };
+    }
+
+    for (action, hovered, mut node, mut bg, mut border, children) in &mut buttons {
+        match action {
+            VariantPanelButton::Summon => {
+                if !source.is_automaton() {
+                    node.display = Display::None;
+                    continue;
+                }
+                node.display = Display::Flex;
+                let label = if !prereq_met {
+                    prereq_not_met(source, &data)
+                } else {
+                    format!("Summon ({} Entropy)", summon_cost)
+                };
+                set_button_label(children, &mut button_labels, &label);
+
+                let active = summon_affordable && hovered.get();
+                bg.0 = if active {
+                    CONTROL_TRACK
+                } else {
+                    PANEL_BACKGROUND
+                };
+                border.set_all(if active {
+                    CONTROL_ACCENT_HOVERED
+                } else if summon_affordable {
+                    CONTROL_ACCENT
+                } else {
+                    PANEL_BORDER
+                });
+                for child in children.iter() {
+                    if let Ok(mut color) = label_colors.get_mut(child) {
+                        color.0 = if summon_affordable {
+                            CONTROL_TEXT
+                        } else {
+                            CONTROL_MUTED_TEXT
+                        };
+                    }
+                }
+            }
+            VariantPanelButton::LevelUp => {
+                if !source.is_automaton() {
+                    node.display = Display::None;
+                    continue;
+                }
+                node.display = Display::Flex;
+                let label = format!(
+                    "Level Up ({} {})",
+                    level_up_cost,
+                    source.label_for_quantity(level_up_cost)
+                );
+                set_button_label(children, &mut button_labels, &label);
+
+                let active = level_up_affordable && hovered.get();
+                bg.0 = if active {
+                    CONTROL_TRACK
+                } else {
+                    PANEL_BACKGROUND
+                };
+                border.set_all(if active {
+                    CONTROL_ACCENT_HOVERED
+                } else if level_up_affordable {
+                    CONTROL_ACCENT
+                } else {
+                    PANEL_BORDER
+                });
+                for child in children.iter() {
+                    if let Ok(mut color) = label_colors.get_mut(child) {
+                        color.0 = if level_up_affordable {
+                            CONTROL_TEXT
+                        } else {
+                            CONTROL_MUTED_TEXT
+                        };
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn set_button_label(
+    children: &Children,
+    labels: &mut Query<
+        &mut Text,
+        (
+            With<VariantPanelButtonLabel>,
+            Without<VariantPanelTitle>,
+            Without<VariantPanelStat>,
+        ),
+    >,
+    new_label: &str,
+) {
+    for child in children.iter() {
+        if let Ok(mut text) = labels.get_mut(child) {
+            text.0 = new_label.to_string();
+        }
+    }
+}
+
+fn on_variant_panel_button(
+    on: On<Pointer<Click>>,
+    actions: Query<&VariantPanelButton>,
+    interface_data: Res<InterfaceState>,
+    mut data: ResMut<GameData>,
+) {
+    if on.button != PointerButton::Primary {
+        return;
+    }
+    let Ok(action) = actions.get(on.event_target()) else {
+        return;
+    };
+    let Some(source) = interface_data.selected_automaton else {
+        return;
+    };
+    match action {
+        VariantPanelButton::Summon => {
+            data.purchase_source(source);
+        }
+        VariantPanelButton::LevelUp => {
+            data.level_up(source);
+        }
     }
 }

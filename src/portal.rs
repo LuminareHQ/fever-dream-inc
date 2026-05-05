@@ -4,7 +4,7 @@ use bevy::{
 };
 use bevy_kira_audio::prelude::*;
 
-use rand;
+use crate::{audio, data::AutomatonVariant, interface::set_hovered_automaton, rand};
 
 pub struct PortalPlugin;
 
@@ -38,10 +38,7 @@ fn setup(
                 hovered: false,
                 scale: 1.0,
             },
-            Mesh3d(meshes.add(Sphere {
-                radius: 1.,
-                ..default()
-            })),
+            Mesh3d(meshes.add(Sphere { radius: 1. })),
             MeshMaterial3d(materials.add(StandardMaterial {
                 emissive: Color::srgb(8., 0., 0.).into(),
                 base_color: Srgba::rgb_u8(255, 0, 0).into(),
@@ -65,9 +62,9 @@ fn setup(
             NotShadowCaster,
             NotShadowReceiver,
         ))
-        .observe(update_interface_state::<Pointer<Out>>(None))
-        .observe(update_interface_state::<Pointer<Over>>(Some(
-            crate::data::AutomatonVariant::Portal,
+        .observe(set_hovered_automaton::<Pointer<Out>>(None))
+        .observe(set_hovered_automaton::<Pointer<Over>>(Some(
+            AutomatonVariant::Portal,
         )))
         .observe(hover_portal)
         .observe(unhover_portal)
@@ -101,14 +98,6 @@ fn setup(
     }
 }
 
-fn update_interface_state<E: EntityEvent>(
-    new_hovered: Option<crate::data::AutomatonVariant>,
-) -> impl Fn(On<E>, ResMut<crate::interface::InterfaceState>) {
-    move |_event, mut interface_state| {
-        interface_state.hovered_automaton = new_hovered;
-    }
-}
-
 fn hover_portal(_on: On<Pointer<Over>>, mut query: Query<&mut PortalState>) {
     for mut state in query.iter_mut() {
         state.hovered = true;
@@ -127,20 +116,14 @@ fn click_on_portal(
     mut rings: Query<(&mut Transform, &mut PortalRing)>,
     audio_state: Res<crate::audio::AudioState>,
     interaction: Res<AudioChannel<crate::audio::InteractionChannel>>,
-    asset_server: Res<AssetServer>,
 ) {
     if on.button != PointerButton::Primary {
         return;
     }
 
-    // Play Pickup Sound if enabled
-    if audio_state.play_pickup {
-        interaction
-            .play(asset_server.load(crate::audio::PICKUP_AUDIO))
-            .with_playback_rate(0.75);
-    }
+    audio::play_pickup_sound(&interaction, &audio_state);
 
-    game_data.add_income(crate::data::AutomatonVariant::Portal, 1);
+    game_data.add_income(AutomatonVariant::Portal, 1);
     for (mut ring_transform, mut ring_state) in rings.iter_mut() {
         if ring_transform.scale.x < 0.75 {
             ring_transform.scale = Vec3::splat(1.0);
